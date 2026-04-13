@@ -19,7 +19,7 @@ var exportYears   = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 var roi           = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
 var MIN_PATCH_PIX = 5;   // minimum connected-pixel count for class-1 patches
 var MAX_NEIGHBORS = 50;  // neighbourhood radius for connectedPixelCount
-var RUN_SUFFIX    = '_noQS_n10k_compSamp';
+var RUN_SUFFIX    = '_noQS_n20k_compSamp';
 
 // =============================================================================
 // 1. LOAD RAW PREDICTIONS

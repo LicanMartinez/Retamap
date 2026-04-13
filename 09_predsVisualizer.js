@@ -17,7 +17,7 @@
 // 0. CONFIGURATION — edit years here
 // =============================================================================
 var ASSET_PREFIX    = 'projects/ee-licanemartinez/assets/Retamap/';
-var RUN_SUFFIX      = '_noQS_n10k_compSamp';  // must match 06/07
+var RUN_SUFFIX      = '_noQS_n20k_compSamp';  // must match 06/07
 var years           = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 var roi             = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
 

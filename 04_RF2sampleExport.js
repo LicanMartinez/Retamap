@@ -21,7 +21,7 @@ var roi           = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
 var BANDS         = ['B2', 'B3', 'B4', 'B8', 'NDYI',
                      'B2_feb', 'B3_feb', 'B4_feb', 'B8_feb', 'NDYI_feb'];
 var N_PER_CLASS   = 20000;
-var RUN_SUFFIX    = '_noQS_n10k_compSamp';
+var RUN_SUFFIX    = '_noQS_n20k_compSamp';
 
 var INCLUDE_S1  = true;
 var INCLUDE_QS1 = false;
