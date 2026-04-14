@@ -31,16 +31,12 @@ var samples_rf2 = ee.FeatureCollection(
 ).flatten();
 
 // =============================================================================
-// 2. TRAIN RF2 (70% split — test set reserved for 08_externalValidation.js)
+// 2. TRAIN RF2 (all samples — validation is handled externally in 08)
 // =============================================================================
-var train = samples_rf2
-  .randomColumn('random', 42)
-  .filter(ee.Filter.lt('random', 0.7));
-
-print('Train samples:', train.size());
+print('Train samples:', samples_rf2.size());
 
 var rf2 = ee.Classifier.smileRandomForest({numberOfTrees: 500}).train({
-  features       : train,
+  features       : samples_rf2,
   classProperty  : 'stable_label',
   inputProperties: BANDS
 });

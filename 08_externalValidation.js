@@ -1,9 +1,7 @@
 // =============================================================================
-// 08: Validation — RF2 holdout (70/30) + external validation 2023
+// 08: Validation — external validation 2023
 // -----------------------------------------------------------------------------
-// Prerequisite : asset RF2_classifier             (from 05_RF2train.js)
-//              + assets RF2_samples_YYYY           (from 04_RF2sampleExport.js)
-//              + asset RF1_prediction_2023         (from 02_RF1fit.js)
+// Prerequisite : asset RF1_prediction_2023         (from 02_RF1fit.js)
 //              + asset RF2_raw_prediction_2023     (from 06_RF2predict.js)
 //              + asset RF2_prediction_2023         (from 07_RF2patchFilter.js)
 //              + asset 4-Validation_points_complete_2023
@@ -11,9 +9,6 @@
 //              + Export.table.toDrive (3 CSV) for downstream analysis in R
 // -----------------------------------------------------------------------------
 // Validation structure
-// ├─ A. RF2 internal holdout (70/30)
-// │     → loads RF2_classifier asset (no re-training)
-// │     → reconstructs test split deterministically (same seed=42 as 05)
 // └─ B. External validation 2023 (independent points)
 //       ├─ B1. RF1_prediction_2023
 //       ├─ B2. RF2_raw_prediction_2023   (before patch filter)
@@ -25,8 +20,6 @@
 // =============================================================================
 var ASSET_PREFIX = 'projects/ee-licanemartinez/assets/Retamap/';
 var DRIVE_FOLDER = 'Retamap/Retamap_GEE_Exports';
-var exportYears  = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
-var BANDS        = ['B2', 'B3', 'B4', 'B8', 'NDYI', 'B2_feb', 'B3_feb', 'B4_feb', 'B8_feb', 'NDYI_feb'];
 var VAL_YEAR     = 2023;
 var RUN_SUFFIX   = '_noQS_n20k_compSamp';
 
@@ -40,7 +33,7 @@ var COMPARE_SUFFIXES = [
 // 1. LOAD ASSETS
 // =============================================================================
 
-// --- 1a. Prediction rasters (2023 only) ---
+// --- 1a. Prediction rasters (VAL_YEAR only) ---
 // RF1 uses band 'pred'; RF2 scripts use band 'classification'
 var rf1_pred     = ee.Image(ASSET_PREFIX + 'RF1_prediction_'     + VAL_YEAR).select('pred');
 var rf2_raw_pred = ee.Image(ASSET_PREFIX + 'RF2_raw_prediction_' + VAL_YEAR + RUN_SUFFIX).select('classification');
@@ -59,17 +52,6 @@ var valPoints = valPointsRaw.map(function(f) {
 print('External validation points (total):', valPoints.size());
 print('  retama:', valPoints.filter(ee.Filter.eq('label', 1)).size());
 print('  ctrl:  ', valPoints.filter(ee.Filter.eq('label', 0)).size());
-
-// --- 1c. Pre-trained RF2 classifier (no re-training needed) ---
-var rf2 = ee.Classifier.load(ASSET_PREFIX + 'RF2_classifier' + RUN_SUFFIX);
-
-// --- 1d. RF2 training samples (merged from per-year assets, to reconstruct test split) ---
-// 04_RF2sampleExport.js exports one asset per year — merge here.
-var samples_rf2 = ee.FeatureCollection(
-  exportYears.map(function(y) {
-    return ee.FeatureCollection(ASSET_PREFIX + 'RF2_samples_' + y + RUN_SUFFIX);
-  })
-).flatten();
 
 // =============================================================================
 // 2. HELPER: compute and print full metrics from an errorMatrix
@@ -92,27 +74,7 @@ var printMetrics = function(label, cm) {
 };
 
 // =============================================================================
-// 3. SECTION A — RF2 INTERNAL HOLDOUT (70/30)
-// -----------------------------------------------------------------------------
-// Same seed=42 as 05_RF2train.js → identical test split.
-// Classifier loaded from asset — no re-training.
-// =============================================================================
-var test = samples_rf2
-  .randomColumn('random', 42)
-  .filter(ee.Filter.gte('random', 0.7));
-
-print('═════════════════════════════════════');
-print('SECTION A — RF2 Internal holdout (70/30)');
-print('Test samples:', test.size());
-
-var cm_rf2_holdout = test
-  .classify(rf2, 'predicted')
-  .errorMatrix({actual: 'stable_label', predicted: 'predicted', order: [0, 1]});
-
-printMetrics('RF2 — Internal holdout (30% test set)', cm_rf2_holdout);
-
-// =============================================================================
-// 4. SECTION B — EXTERNAL VALIDATION 2023
+// 3. SECTION B — EXTERNAL VALIDATION 2023
 // -----------------------------------------------------------------------------
 // sampleRegions samples each prediction raster at the validation point locations.
 // Points that fall on nodata pixels (e.g. RF2 after patch masking) are dropped
@@ -171,7 +133,7 @@ var cm_rf2_ext = rf2_sampled.errorMatrix({
 printMetrics('RF2 final — External validation ' + VAL_YEAR, cm_rf2_ext);
 
 // =============================================================================
-// 5. EXPORT SAMPLED TABLES TO DRIVE (for R analysis)
+// 4. EXPORT SAMPLED TABLES TO DRIVE (for R analysis)
 // -----------------------------------------------------------------------------
 // Each exported CSV contains: label (0/1), predicted value, TIPO, YEAR.
 // Allows recomputing any metric in R (e.g. ROC, precision-recall curves).
@@ -201,14 +163,13 @@ Export.table.toDrive({
 });
 
 // =============================================================================
-// 6. SECTION C — CROSS-RUN COMPARISON
+// 5. SECTION C — CROSS-RUN COMPARISON
 // -----------------------------------------------------------------------------
 // Loops over COMPARE_SUFFIXES.  For each run:
-//   C-A  — RF2 holdout 70/30 (loads classifier + samples for that run)
 //   C-B2 — RF2 raw   external validation VAL_YEAR
 //   C-B3 — RF2 final external validation VAL_YEAR
 // RF1 is run-independent → already shown in Section B, not repeated here.
-// Console output only (no exports — use sections A-B-5 for the primary run).
+// Console output only (no exports — use sections B-4 for the primary run).
 // =============================================================================
 print('═════════════════════════════════════');
 print('SECTION C — Cross-run comparison (external ' + VAL_YEAR + ')');
@@ -217,27 +178,6 @@ print('Runs compared:', COMPARE_SUFFIXES.length);
 COMPARE_SUFFIXES.forEach(function(suffix) {
   print('');
   print('▶▶▶ Run: ' + suffix);
-
-  // --- C-A. RF2 holdout 70/30 ---
-  var cmp_clf = ee.Classifier.load(ASSET_PREFIX + 'RF2_classifier' + suffix);
-
-  var cmp_samples = ee.FeatureCollection(
-    exportYears.map(function(y) {
-      return ee.FeatureCollection(ASSET_PREFIX + 'RF2_samples_' + y + suffix);
-    })
-  ).flatten();
-
-  var cmp_test = cmp_samples
-    .randomColumn('random', 42)
-    .filter(ee.Filter.gte('random', 0.7));
-
-  print('C-A [' + suffix + '] test samples:', cmp_test.size());
-
-  var cmp_cm_holdout = cmp_test
-    .classify(cmp_clf, 'predicted')
-    .errorMatrix({actual: 'stable_label', predicted: 'predicted', order: [0, 1]});
-
-  printMetrics('[' + suffix + '] RF2 — Internal holdout (30% test)', cmp_cm_holdout);
 
   // --- C-B2. RF2 raw external ---
   var cmp_rf2_raw = ee.Image(ASSET_PREFIX + 'RF2_raw_prediction_' + VAL_YEAR + suffix)
