@@ -33,7 +33,9 @@ var RUN_SUFFIX   = '_noQS_n20k_compSamp';
 // Section C — cross-run comparison (edit to include the runs you want to compare)
 var COMPARE_SUFFIXES = [
   '_noQS_n20k_compSamp',
-  // '_noQS_n1000',       // example: uncomment / add other runs here
+  '_noQS1_n20k',
+  '_noQS_n10k',
+  '_noQS1_10k'
 ];
 
 // =============================================================================
