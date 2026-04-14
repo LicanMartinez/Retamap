@@ -58,6 +58,52 @@ years.forEach(function(year) {
 });
 
 
+// =============================================================================
+// 3. MULTI-RUN RAW COMPARISON
+// -----------------------------------------------------------------------------
+// Compares RF2 raw predictions across different RUN_SUFFIX values + RF1.
+// Edit COMPARE_SUFFIXES to include the runs you want to compare.
+// Each run gets a distinct color; RF1 always shown in yellow.
+// All layers off by default.
+// =============================================================================
+
+var COMPARE_YEARS    = [2023];            // years to compare (usually 1–2 key years)
+var COMPARE_SUFFIXES = [                  // list of RUN_SUFFIX strings to compare
+  '_noQS_n20k_compSamp',
+  // '_noQS_n1000',                       // example: add / uncomment runs here
+];
+
+// Palettes for each suffix — extend if adding more runs
+var COMPARE_PALETTES = [
+  '#FF8C00',   // orange (run 1)
+  '#00BFFF',   // deep-sky-blue (run 2)
+  '#39FF14',   // neon-green (run 3)
+  '#FF00FF',   // magenta (run 4)
+  '#FF4500',   // orange-red (run 5)
+];
+
+COMPARE_YEARS.forEach(function(year) {
+  // RF1 — shown once per year regardless of suffix list
+  var rf1 = ee.Image(ASSET_PREFIX + 'RF1_prediction_' + year)
+    .select('pred').selfMask().clip(roi);
+  Map.addLayer(rf1, visRF1, '[CMP] RF1 ' + year, false);
+
+  // RF2 raw per suffix
+  COMPARE_SUFFIXES.forEach(function(suffix, idx) {
+    var palette = COMPARE_PALETTES[idx % COMPARE_PALETTES.length];
+    var rf2raw = ee.Image(ASSET_PREFIX + 'RF2_raw_prediction_' + year + suffix)
+      .select('classification').selfMask().clip(roi);
+    Map.addLayer(
+      rf2raw,
+      {min: 1, max: 1, palette: [palette]},
+      '[CMP] RF2 raw ' + year + ' ' + suffix,
+      false
+    );
+  });
+});
+
+// =============================================================================
+
 ////// print validation points
 // Cargar la FeatureCollection
 var valPoints = ee.FeatureCollection('projects/ee-licanemartinez/assets/Retamap/5-Validation_points_complete_2023');
