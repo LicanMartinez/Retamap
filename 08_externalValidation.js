@@ -30,6 +30,12 @@ var BANDS        = ['B2', 'B3', 'B4', 'B8', 'NDYI', 'B2_feb', 'B3_feb', 'B4_feb'
 var VAL_YEAR     = 2023;
 var RUN_SUFFIX   = '_noQS_n20k_compSamp';
 
+// Section C — cross-run comparison (edit to include the runs you want to compare)
+var COMPARE_SUFFIXES = [
+  '_noQS_n20k_compSamp',
+  // '_noQS_n1000',       // example: uncomment / add other runs here
+];
+
 // =============================================================================
 // 1. LOAD ASSETS
 // =============================================================================
@@ -192,4 +198,82 @@ Export.table.toDrive({
   folder         : DRIVE_FOLDER,
   fileNamePrefix : 'Validation_RF2final_external_' + VAL_YEAR + RUN_SUFFIX,
   fileFormat     : 'CSV'
+});
+
+// =============================================================================
+// 6. SECTION C — CROSS-RUN COMPARISON
+// -----------------------------------------------------------------------------
+// Loops over COMPARE_SUFFIXES.  For each run:
+//   C-A  — RF2 holdout 70/30 (loads classifier + samples for that run)
+//   C-B2 — RF2 raw   external validation VAL_YEAR
+//   C-B3 — RF2 final external validation VAL_YEAR
+// RF1 is run-independent → already shown in Section B, not repeated here.
+// Console output only (no exports — use sections A-B-5 for the primary run).
+// =============================================================================
+print('═════════════════════════════════════');
+print('SECTION C — Cross-run comparison (external ' + VAL_YEAR + ')');
+print('Runs compared:', COMPARE_SUFFIXES.length);
+
+COMPARE_SUFFIXES.forEach(function(suffix) {
+  print('');
+  print('▶▶▶ Run: ' + suffix);
+
+  // --- C-A. RF2 holdout 70/30 ---
+  var cmp_clf = ee.Classifier.load(ASSET_PREFIX + 'RF2_classifier' + suffix);
+
+  var cmp_samples = ee.FeatureCollection(
+    exportYears.map(function(y) {
+      return ee.FeatureCollection(ASSET_PREFIX + 'RF2_samples_' + y + suffix);
+    })
+  ).flatten();
+
+  var cmp_test = cmp_samples
+    .randomColumn('random', 42)
+    .filter(ee.Filter.gte('random', 0.7));
+
+  print('C-A [' + suffix + '] test samples:', cmp_test.size());
+
+  var cmp_cm_holdout = cmp_test
+    .classify(cmp_clf, 'predicted')
+    .errorMatrix({actual: 'stable_label', predicted: 'predicted', order: [0, 1]});
+
+  printMetrics('[' + suffix + '] RF2 — Internal holdout (30% test)', cmp_cm_holdout);
+
+  // --- C-B2. RF2 raw external ---
+  var cmp_rf2_raw = ee.Image(ASSET_PREFIX + 'RF2_raw_prediction_' + VAL_YEAR + suffix)
+    .select('classification');
+
+  var cmp_raw_sampled = cmp_rf2_raw.sampleRegions({
+    collection : valPoints,
+    properties : ['label'],
+    scale      : 10,
+    tileScale  : 4
+  });
+  print('C-B2 [' + suffix + '] RF2 raw — matched points:', cmp_raw_sampled.size());
+
+  var cmp_cm_raw = cmp_raw_sampled.errorMatrix({
+    actual   : 'label',
+    predicted: 'classification',
+    order    : [0, 1]
+  });
+  printMetrics('[' + suffix + '] RF2 raw — External validation ' + VAL_YEAR, cmp_cm_raw);
+
+  // --- C-B3. RF2 final external ---
+  var cmp_rf2_fin = ee.Image(ASSET_PREFIX + 'RF2_prediction_' + VAL_YEAR + suffix)
+    .select('classification');
+
+  var cmp_fin_sampled = cmp_rf2_fin.sampleRegions({
+    collection : valPoints,
+    properties : ['label'],
+    scale      : 10,
+    tileScale  : 4
+  });
+  print('C-B3 [' + suffix + '] RF2 final — matched points:', cmp_fin_sampled.size());
+
+  var cmp_cm_fin = cmp_fin_sampled.errorMatrix({
+    actual   : 'label',
+    predicted: 'classification',
+    order    : [0, 1]
+  });
+  printMetrics('[' + suffix + '] RF2 final — External validation ' + VAL_YEAR, cmp_cm_fin);
 });
