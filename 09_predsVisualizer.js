@@ -50,11 +50,11 @@ years.forEach(function(year) {
   var rf2fin = ee.Image(ASSET_PREFIX + 'RF2_prediction_' + year + RUN_SUFFIX)
     .select('classification').selfMask().clip(roi);
 
-  Map.addLayer(rf1,    visRF1,    'RF1 '       + year, false);
-  Map.addLayer(rf2raw, visRF2raw, 'RF2 raw '   + year, false);
-  if (SHOW_RF2_FINAL) {
-    Map.addLayer(rf2fin, visRF2fin, 'RF2 final ' + year, false);
-  }
+  // Map.addLayer(rf1,    visRF1,    'RF1 '       + year, false);
+  // Map.addLayer(rf2raw, visRF2raw, 'RF2 raw '   + year, false);
+  // if (SHOW_RF2_FINAL) {
+  //   Map.addLayer(rf2fin, visRF2fin, 'RF2 final ' + year, false);
+  // }
 });
 
 
@@ -67,11 +67,13 @@ years.forEach(function(year) {
 // All layers off by default.
 // =============================================================================
 
-var COMPARE_YEARS    = [2023];            // years to compare (usually 1–2 key years)
+var COMPARE_YEARS    = [2017];            // years to compare (usually 1–2 key years)
 var COMPARE_SUFFIXES = [                  // list of RUN_SUFFIX strings to compare
   '_noQS_n20k_compSamp',
-  // '_noQS_n1000',                       // example: add / uncomment runs here
-];
+  '_noQS1_n20k',
+  '_noQS_n10k',
+  '_noQS1_10k'
+  ];
 
 // Palettes for each suffix — extend if adding more runs
 var COMPARE_PALETTES = [
