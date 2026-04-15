@@ -20,13 +20,13 @@ var exportYears   = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 var roi           = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
 var BANDS         = ['B2', 'B3', 'B4', 'B8', 'NDYI',
                      'B2_feb', 'B3_feb', 'B4_feb', 'B8_feb', 'NDYI_feb'];
-var N_PER_CLASS   = 20000;
-var RUN_SUFFIX    = '_noQS_n20k_compSamp';
+var N_PER_CLASS   = 10000;
+var RUN_SUFFIX    = '_siQS_n10k_compSamp';
 
 var INCLUDE_S1  = true;
-var INCLUDE_QS1 = false;
+var INCLUDE_QS1 = true;
 var INCLUDE_S0  = true;
-var INCLUDE_QS0 = false;
+var INCLUDE_QS0 = true;
 
 var USE_COMPLEMENTARY      = true;
 var COMPLEMENTARY_POLYGONS = ASSET_PREFIX + 'RF2_complementarySamplingStableRegions_kmsBari';
