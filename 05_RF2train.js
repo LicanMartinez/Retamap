@@ -16,7 +16,7 @@
 var ASSET_PREFIX = 'projects/ee-licanemartinez/assets/Retamap/';
 var exportYears  = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 var BANDS        = ['B2', 'B3', 'B4', 'B8', 'NDYI', 'B2_feb', 'B3_feb', 'B4_feb', 'B8_feb', 'NDYI_feb'];
-var RUN_SUFFIX   = '_noQS_n20k_compSamp';
+var RUN_SUFFIX   = '_QS_n10k_compSamp';
 
 // =============================================================================
 // 1. LOAD AND MERGE PER-YEAR SAMPLE ASSETS
