@@ -17,7 +17,7 @@
 // 0. CONFIGURATION — edit years here
 // =============================================================================
 var ASSET_PREFIX    = 'projects/ee-licanemartinez/assets/Retamap/';
-var RUN_SUFFIX      = '_noQS_n20k_compSamp';  // must match 06/07
+var RUN_SUFFIX      = '_QS_n10k';  // must match 06/07
 // var years           = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 var years           = [2023, 2017];
 var roi             = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
@@ -68,12 +68,13 @@ years.forEach(function(year) {
 // All layers off by default.
 // =============================================================================
 
-var COMPARE_YEARS    = [2017];            // years to compare (usually 1–2 key years)
+var COMPARE_YEARS    = [2023];            // years to compare (usually 1–2 key years)
 var COMPARE_SUFFIXES = [                  // list of RUN_SUFFIX strings to compare
   '_noQS_n20k_compSamp',
   '_noQS1_n20k',
   '_noQS_n10k',
-  '_noQS1_10k'
+  '_noQS1_10k',
+  '_noQS_10k'
   ];
 
 // Palettes for each suffix — extend if adding more runs
@@ -96,12 +97,12 @@ COMPARE_YEARS.forEach(function(year) {
     var palette = COMPARE_PALETTES[idx % COMPARE_PALETTES.length];
     var rf2raw = ee.Image(ASSET_PREFIX + 'RF2_raw_prediction_' + year + suffix)
       .select('classification').selfMask().clip(roi);
-    // Map.addLayer(
-    //   rf2raw,
-    //   {min: 1, max: 1, palette: [palette]},
-    //   '[CMP] RF2 raw ' + year + ' ' + suffix,
-    //   false
-    // );
+    Map.addLayer(
+      rf2raw,
+      {min: 1, max: 1, palette: [palette]},
+      '[CMP] RF2 raw ' + year + ' ' + suffix,
+      false
+    );
   });
 });
 
