@@ -36,7 +36,7 @@ var visRF2fin  = {min: 1, max: 1, palette: ['#CC0000']};  // red
 // Order per year: RF1 (bottom) → RF2 raw → RF2 final (top).
 // All layers off by default.
 // =============================================================================
-Map.centerObject(roi, 10);
+// Map.centerObject(roi, 10);
 
 years.forEach(function(year) {
   // RF1 band is 'pred' (from 02_RF1fit.js)
@@ -51,11 +51,11 @@ years.forEach(function(year) {
   var rf2fin = ee.Image(ASSET_PREFIX + 'RF2_prediction_' + year + RUN_SUFFIX)
     .select('classification').selfMask().clip(roi);
 
-  Map.addLayer(rf1,    visRF1,    'RF1 '       + year, false);
-  Map.addLayer(rf2raw, visRF2raw, 'RF2 raw '   + year, false);
-  if (SHOW_RF2_FINAL) {
-    Map.addLayer(rf2fin, visRF2fin, 'RF2 final ' + year, false);
-  }
+  // Map.addLayer(rf1,    visRF1,    'RF1 '       + year, false);
+  // Map.addLayer(rf2raw, visRF2raw, 'RF2 raw '   + year, false);
+  // if (SHOW_RF2_FINAL) {
+  //   Map.addLayer(rf2fin, visRF2fin, 'RF2 final ' + year, false);
+  // }
 });
 
 
@@ -68,13 +68,13 @@ years.forEach(function(year) {
 // All layers off by default.
 // =============================================================================
 
-var COMPARE_YEARS    = [2023];            // years to compare (usually 1–2 key years)
+var COMPARE_YEARS    = [2023, 2017];            // years to compare (usually 1–2 key years)
 var COMPARE_SUFFIXES = [                  // list of RUN_SUFFIX strings to compare
   '_noQS_n20k_compSamp',
+  '_QS_n10k_compSamp',
   '_noQS1_n20k',
   '_noQS_n10k',
-  '_noQS1_10k',
-  '_noQS_10k'
+  '_QS_n10k'
   ];
 
 // Palettes for each suffix — extend if adding more runs
@@ -90,7 +90,7 @@ COMPARE_YEARS.forEach(function(year) {
   // RF1 — shown once per year regardless of suffix list
   var rf1 = ee.Image(ASSET_PREFIX + 'RF1_prediction_' + year)
     .select('pred').selfMask().clip(roi);
-  // Map.addLayer(rf1, visRF1, '[CMP] RF1 ' + year, false);
+  Map.addLayer(rf1, visRF1, '[CMP] RF1 ' + year, false);
 
   // RF2 raw per suffix
   COMPARE_SUFFIXES.forEach(function(suffix, idx) {
@@ -122,5 +122,5 @@ var retamaPoints = valPoints.filter(ee.Filter.eq('TIPO', 'retama'));
 // Agregar las capas al mapa con los colores requeridos
 Map.addLayer(ctrlPoints, {color: 'darkgreen'}, 'Puntos Ctrl');
 Map.addLayer(retamaPoints, {color: 'gold'}, 'Puntos Retama');
-
+Map.setOptions('SATELLITE')
 
