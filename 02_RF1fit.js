@@ -88,24 +88,27 @@ var rf1 = ee.Classifier.smileRandomForest({numberOfTrees: 500}).train({
 var predictRF1 = function(image) {
   var pred = image.select(BANDS).classify(rf1).rename('pred');
 
-  // Connected pixel filter applied only to class-1 patches.
-  // selfMask() makes class-0 pixels nodata temporarily so connectedPixelCount
-  // counts only retama (1) pixels. connected is nodata where pred=0.
-  var connected = pred.selfMask().connectedPixelCount(50, true);  // 8-connected
+  // // Connected pixel filter applied only to class-1 patches.
+  // // selfMask() makes class-0 pixels nodata temporarily so connectedPixelCount
+  // // counts only retama (1) pixels. connected is nodata where pred=0.
+  // var connected = pred.selfMask().connectedPixelCount(50, true);  // 8-connected
 
-  // Small class-1 patches (< 5 pixels) are reclassified to 0 instead of
-  // becoming nodata. Class-0 pixels are preserved as-is.
-  // connected.unmask(0): for class-0 pixels (where connected=nodata), unmask
-  // gives 0, but pred.eq(1) is false there, so the where() condition is false
-  // and class-0 pixels are untouched.
-  var predClean = pred
-    .where(
-      pred.eq(1).and(connected.unmask(0).lt(5)),
-      0
-    )
-    .rename('pred');
+  // // Small class-1 patches (< 5 pixels) are reclassified to 0 instead of
+  // // becoming nodata. Class-0 pixels are preserved as-is.
+  // // connected.unmask(0): for class-0 pixels (where connected=nodata), unmask
+  // // gives 0, but pred.eq(1) is false there, so the where() condition is false
+  // // and class-0 pixels are untouched.
+  // var predClean = pred
+  //   .where(
+  //     pred.eq(1).and(connected.unmask(0).lt(5)),
+  //     0
+  //   )
+  //   .rename('pred');
 
-  return predClean.set('year', image.get('year'));
+  // return predClean.set('year', image.get('year'));
+  
+  return pred
+  
 };
 
 var preds_collection = mergedCollection.map(predictRF1);
@@ -121,7 +124,7 @@ exportYears.forEach(function(year) {
   Export.image.toAsset({
     image: img,
     description: 'Export_RF1_' + year,
-    assetId: ASSET_PREFIX + 'RF1_prediction_' + year,
+    assetId: ASSET_PREFIX + 'RF1_raw_prediction_' + year,
     region: roi,
     scale: 10,
     maxPixels: 1e13
@@ -131,7 +134,7 @@ exportYears.forEach(function(year) {
     image         : img,
     description   : 'Drive_RF1_' + year,
     folder        : DRIVE_FOLDER,
-    fileNamePrefix: 'RF1_prediction_' + year,
+    fileNamePrefix: 'RF1_raw_prediction_' + year,
     region        : roi,
     scale         : 10,
     maxPixels     : 1e13,
