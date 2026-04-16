@@ -71,7 +71,7 @@ var samples_rf1 = mergedCollection.map(function(image) {
 
 }).flatten();
 
-
+print(samples_rf1.size());
 
 // =============================================================================
 // 4. TRAIN RF1
@@ -107,7 +107,7 @@ var predictRF1 = function(image) {
 
   // return predClean.set('year', image.get('year'));
   
-  return pred
+  return pred.set('year', image.get('year'));
   
 };
 
