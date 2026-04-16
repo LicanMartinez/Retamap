@@ -56,23 +56,25 @@ print('  retama:', valPoints.filter(ee.Filter.eq('label', 1)).size());
 print('  ctrl:  ', valPoints.filter(ee.Filter.eq('label', 0)).size());
 
 // =============================================================================
-// 2. HELPER: compute and print full metrics from an errorMatrix
+// 2. HELPER: build an ee.Feature with all metrics from an errorMatrix
 // =============================================================================
-var printMetrics = function(label, cm) {
+// Returns a Feature with properties: Model, OA, Kappa, Recall, Precision, F1.
+// Use metricsFeature(...) to build rows for a summary table rendered via
+// ui.Chart.feature.byFeature(...).setChartType('Table').
+var metricsFeature = function(label, cm) {
   // producersAccuracy: ee.Array shape [[pa0], [pa1]]
   // consumersAccuracy: ee.Array shape [[ca0, ca1]]
   var pa1 = ee.Array(cm.producersAccuracy()).get([1, 0]);  // recall    class-1
   var ca1 = ee.Array(cm.consumersAccuracy()).get([0, 1]);  // precision class-1
   var f1  = pa1.multiply(ca1).multiply(2).divide(pa1.add(ca1));
-
-  print('─────────────────────────────────────');
-  print(label);
-  print('Confusion matrix:',   cm);
-  print('Overall accuracy:',   cm.accuracy());
-  print('Kappa:',              cm.kappa());
-  print('Producers accuracy:', cm.producersAccuracy());
-  print('Consumers accuracy:', cm.consumersAccuracy());
-  print('F1 (class retama):',  f1);
+  return ee.Feature(null, {
+    'Model'    : label,
+    'OA'       : cm.accuracy(),
+    'Kappa'    : cm.kappa(),
+    'Recall'   : pa1,
+    'Precision': ca1,
+    'F1'       : f1
+  });
 };
 
 // =============================================================================
@@ -100,7 +102,6 @@ var cm_rf1_ext = rf1_sampled.errorMatrix({
   predicted: 'pred',
   order    : [0, 1]
 });
-printMetrics('RF1 — External validation ' + VAL_YEAR, cm_rf1_ext);
 
 // --- B2. RF2 raw (before patch filter) ---
 var rf2_raw_sampled = rf2_raw_pred.sampleRegions({
@@ -116,7 +117,6 @@ var cm_rf2_raw_ext = rf2_raw_sampled.errorMatrix({
   predicted: 'classification',
   order    : [0, 1]
 });
-printMetrics('RF2 raw — External validation ' + VAL_YEAR, cm_rf2_raw_ext);
 
 // --- B3. RF2 final (after patch filter) ---
 var rf2_sampled = rf2_pred.sampleRegions({
@@ -132,7 +132,19 @@ var cm_rf2_ext = rf2_sampled.errorMatrix({
   predicted: 'classification',
   order    : [0, 1]
 });
-printMetrics('RF2 final — External validation ' + VAL_YEAR, cm_rf2_ext);
+
+// --- B. Summary table (rendered in console) ---
+var sectionB_FC = ee.FeatureCollection([
+  metricsFeature('RF1',       cm_rf1_ext),
+  metricsFeature('RF2 raw',   cm_rf2_raw_ext),
+  metricsFeature('RF2 final', cm_rf2_ext)
+]);
+
+print(
+  ui.Chart.feature.byFeature(sectionB_FC, 'Model', ['OA', 'Kappa', 'Recall', 'Precision', 'F1'])
+    .setChartType('Table')
+    .setOptions({title: 'Section B — External validation ' + VAL_YEAR})
+);
 
 // =============================================================================
 // 4. EXPORT SAMPLED TABLES TO DRIVE (for R analysis)
@@ -177,10 +189,11 @@ print('════════════════════════�
 print('SECTION C — Cross-run comparison (external ' + VAL_YEAR + ')');
 print('Runs compared:', COMPARE_SUFFIXES.length);
 
-COMPARE_SUFFIXES.forEach(function(suffix) {
-  print('');
-  print('▶▶▶ Run: ' + suffix);
+// Build one row per (suffix × stage): RF2 raw and RF2 final.
+// All features are collected into a single FeatureCollection rendered as a table.
+var sectionC_features = [];
 
+COMPARE_SUFFIXES.forEach(function(suffix) {
   // --- C-B2. RF2 raw external ---
   var cmp_rf2_raw = ee.Image(ASSET_PREFIX + 'RF2_raw_prediction_' + VAL_YEAR + suffix)
     .select('classification');
@@ -198,7 +211,7 @@ COMPARE_SUFFIXES.forEach(function(suffix) {
     predicted: 'classification',
     order    : [0, 1]
   });
-  printMetrics('[' + suffix + '] RF2 raw — External validation ' + VAL_YEAR, cmp_cm_raw);
+  sectionC_features.push(metricsFeature(suffix + ' · raw', cmp_cm_raw));
 
   // --- C-B3. RF2 final external ---
   var cmp_rf2_fin = ee.Image(ASSET_PREFIX + 'RF2_prediction_' + VAL_YEAR + suffix)
@@ -217,5 +230,14 @@ COMPARE_SUFFIXES.forEach(function(suffix) {
     predicted: 'classification',
     order    : [0, 1]
   });
-  printMetrics('[' + suffix + '] RF2 final — External validation ' + VAL_YEAR, cmp_cm_fin);
+  sectionC_features.push(metricsFeature(suffix + ' · final', cmp_cm_fin));
 });
+
+// --- C. Summary table (rendered in console) ---
+print(
+  ui.Chart.feature.byFeature(
+    ee.FeatureCollection(sectionC_features), 'Model', ['OA', 'Kappa', 'Recall', 'Precision', 'F1']
+  )
+    .setChartType('Table')
+    .setOptions({title: 'Section C — Cross-run comparison (external ' + VAL_YEAR + ')'})
+);
