@@ -92,7 +92,7 @@ var samples_rf1 = mergedCollection.map(function(image) {
 
 }).flatten();
 
-print(samples_rf1.size());
+// print(samples_rf1.size());
 
 // =============================================================================
 // 4. TRAIN RF1
