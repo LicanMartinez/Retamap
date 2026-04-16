@@ -123,7 +123,7 @@ exportYears.forEach(function(year) {
 
   Export.image.toAsset({
     image: img,
-    description: 'Export_RF1_' + year,
+    description: 'Export_RF1_raw' + year,
     assetId: ASSET_PREFIX + 'RF1_raw_prediction_' + year,
     region: roi,
     scale: 10,
