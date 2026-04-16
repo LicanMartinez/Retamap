@@ -16,12 +16,15 @@ var ASSET_PREFIX = 'projects/ee-licanemartinez/assets/Retamap/';
 var DRIVE_FOLDER = 'Retamap/Retamap_GEE_Exports';
 var VAL_YEAR     = 2023;
 
+// Toggle to include or exclude the final RF2 prediction (after patch filter)
+var INCLUDE_RF2_FINAL = false; // Set to false to evaluate only RF2 raw
+
 // List all runs to compare (ensure the primary run is included here)
 var COMPARE_SUFFIXES = [
   '_noQS_n20k_compSamp',
   '_noQS1_n20k',
-  // '_QS_n10k_compSamp', 
-  // "_QS_n10k",
+  '_QS_n10k_compSamp', 
+  "_QS_n10k",
 ];
 
 // =============================================================================
@@ -40,17 +43,18 @@ var valPoints = valPointsRaw.map(function(f) {
 // =============================================================================
 // 2. HELPER: build an ee.Feature with all metrics from an errorMatrix
 // =============================================================================
-var metricsFeature = function(label, cm) {
+var metricsFeature = function(label, cm, count) {
   var pa1 = ee.Array(cm.producersAccuracy()).get([1, 0]);  // recall    class-1
   var ca1 = ee.Array(cm.consumersAccuracy()).get([0, 1]);  // precision class-1
   var f1  = pa1.multiply(ca1).multiply(2).divide(pa1.add(ca1));
   return ee.Feature(null, {
-    'Model'    : label,
-    'OA'       : cm.accuracy(),
-    'Kappa'    : cm.kappa(),
-    'Recall'   : pa1,
-    'Precision': ca1,
-    'F1'       : f1
+    'Model'         : label,
+    'Matched_Points': count,
+    'OA'            : cm.accuracy(),
+    'Kappa'         : cm.kappa(),
+    'Recall'        : pa1,
+    'Precision'     : ca1,
+    'F1'            : f1
   });
 };
 
@@ -78,7 +82,7 @@ var cm_rf1 = rf1_sampled.errorMatrix({
   predicted: 'pred',
   order    : [0, 1]
 });
-unifiedFeatures.push(metricsFeature('RF1', cm_rf1));
+unifiedFeatures.push(metricsFeature('RF1', cm_rf1, rf1_sampled.size()));
 
 Export.table.toDrive({
   collection     : rf1_sampled,
@@ -105,7 +109,7 @@ COMPARE_SUFFIXES.forEach(function(suffix) {
     predicted: 'classification',
     order    : [0, 1]
   });
-  unifiedFeatures.push(metricsFeature('RF2 raw (' + suffix + ')', cm_rf2_raw));
+  unifiedFeatures.push(metricsFeature('RF2 raw (' + suffix + ')', cm_rf2_raw, rf2_raw_sampled.size()));
 
   Export.table.toDrive({
     collection     : rf2_raw_sampled,
@@ -116,34 +120,36 @@ COMPARE_SUFFIXES.forEach(function(suffix) {
   });
 
   // RF2 final
-  var rf2_fin = ee.Image(ASSET_PREFIX + 'RF2_prediction_' + VAL_YEAR + suffix).select('classification');
-  var rf2_fin_sampled = rf2_fin.sampleRegions({
-    collection : valPoints,
-    properties : ['label'],
-    scale      : 10,
-    tileScale  : 4
-  });
-  
-  var cm_rf2_fin = rf2_fin_sampled.errorMatrix({
-    actual   : 'label',
-    predicted: 'classification',
-    order    : [0, 1]
-  });
-  unifiedFeatures.push(metricsFeature('RF2 final (' + suffix + ')', cm_rf2_fin));
+  if (INCLUDE_RF2_FINAL) {
+    var rf2_fin = ee.Image(ASSET_PREFIX + 'RF2_prediction_' + VAL_YEAR + suffix).select('classification');
+    var rf2_fin_sampled = rf2_fin.sampleRegions({
+      collection : valPoints,
+      properties : ['label'],
+      scale      : 10,
+      tileScale  : 4
+    });
+    
+    var cm_rf2_fin = rf2_fin_sampled.errorMatrix({
+      actual   : 'label',
+      predicted: 'classification',
+      order    : [0, 1]
+    });
+    unifiedFeatures.push(metricsFeature('RF2 final (' + suffix + ')', cm_rf2_fin, rf2_fin_sampled.size()));
 
-  Export.table.toDrive({
-    collection     : rf2_fin_sampled,
-    description    : 'Validation_RF2final_external_' + VAL_YEAR + suffix,
-    folder         : DRIVE_FOLDER,
-    fileNamePrefix : 'Validation_RF2final_external_' + VAL_YEAR + suffix,
-    fileFormat     : 'CSV'
-  });
+    Export.table.toDrive({
+      collection     : rf2_fin_sampled,
+      description    : 'Validation_RF2final_external_' + VAL_YEAR + suffix,
+      folder         : DRIVE_FOLDER,
+      fileNamePrefix : 'Validation_RF2final_external_' + VAL_YEAR + suffix,
+      fileFormat     : 'CSV'
+    });
+  }
 });
 
 // --- 3c. Unified Summary Table ---
 print(
   ui.Chart.feature.byFeature(
-    ee.FeatureCollection(unifiedFeatures), 'Model', ['OA', 'Kappa', 'Recall', 'Precision', 'F1']
+    ee.FeatureCollection(unifiedFeatures), 'Model', ['Matched_Points', 'OA', 'Kappa', 'Recall', 'Precision', 'F1']
   )
     .setChartType('Table')
     .setOptions({title: 'Unified Validation & Comparison (' + VAL_YEAR + ')'})
