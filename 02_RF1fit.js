@@ -47,14 +47,21 @@ var N_RETAMA = 10000;  // total class-1 points across all years
 // stratifiedSample runs ONCE over the full polygon set → total N is controlled.
 var labeledPolygons = gt_polygons_new.map(addType01);
 
-var labelImage = labeledPolygons
-  .reduceToImage({
-    properties: ['type_01', 'ANIO_FL'],
-    reducer: ee.Reducer.first()
-  });
+var imgType = labeledPolygons.reduceToImage({
+  properties: ['type_01'],
+  reducer: ee.Reducer.first()
+}).rename('type_01');
+
+var imgAnioFL = labeledPolygons.reduceToImage({
+  properties: ['ANIO_FL'],
+  reducer: ee.Reducer.first()
+}).rename('ANIO_FL');
+
+var labelImage = imgType.addBands(imgAnioFL);
 
 var samplePoints = labelImage
   .stratifiedSample({
+    numPoints  : 0,
     classBand  : 'type_01',
     region     : roi,
     scale      : 10,
@@ -85,7 +92,7 @@ var samples_rf1 = mergedCollection.map(function(image) {
 
 }).flatten();
 
-print(samples_rf1.size());
+// print(samples_rf1.size());
 
 // =============================================================================
 // 4. TRAIN RF1

@@ -19,7 +19,7 @@
 var ASSET_PREFIX    = 'projects/ee-licanemartinez/assets/Retamap/';
 var RUN_SUFFIX      = '_QS_n10k';  // must match 06/07
 // var years           = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
-var years           = [2023, 2017];
+var years           = [2023, 2018];
 var roi             = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
 
 // Set to true only after running 07_RF2patchFilter.js
@@ -68,7 +68,7 @@ years.forEach(function(year) {
 // All layers off by default.
 // =============================================================================
 
-var COMPARE_YEARS    = [2023, 2017];            // years to compare (usually 1–2 key years)
+var COMPARE_YEARS    = [2023, 2018];            // years to compare (usually 1–2 key years)
 var COMPARE_SUFFIXES = [                  // list of RUN_SUFFIX strings to compare
   '_noQS_n20k_compSamp',
   '_QS_n10k_compSamp',
