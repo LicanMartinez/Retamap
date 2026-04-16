@@ -38,36 +38,50 @@ var addType01 = function(feature) {
 };
 
 // =============================================================================
-// 3. STRATIFIED SAMPLING (per year, matched to polygon year)
+// 3. STRATIFIED SAMPLING (two-step: fixed N points → per-year pixel lookup)
 // =============================================================================
+var N_CTRL   = 15000;  // total class-0 points across all years
+var N_RETAMA = 10000;  // total class-1 points across all years
+
+// Step 1: reduce ALL polygons (all years) to a 2-band raster: type_01 + ANIO_FL.
+// stratifiedSample runs ONCE over the full polygon set → total N is controlled.
+var labeledPolygons = gt_polygons_new.map(addType01);
+
+var labelImage = labeledPolygons
+  .reduceToImage({
+    properties: ['type_01', 'ANIO_FL'],
+    reducer: ee.Reducer.first()
+  });
+
+var samplePoints = labelImage
+  .stratifiedSample({
+    classBand  : 'type_01',
+    region     : roi,
+    scale      : 10,
+    classValues: [0, 1],
+    classPoints: [N_CTRL, N_RETAMA],
+    geometries : true,
+    tileScale  : 16
+  });
+// Each point carries type_01 and ANIO_FL.
+// Distribution across years is proportional to polygon area per year/class.
+// Inspect with: print(samplePoints.aggregate_histogram('ANIO_FL'));
+
+// Step 2: for each year's image, look up spectral values only at that year's points.
+// sampleRegions is a point-in-raster lookup — cheap, runs in parallel across years.
 var samples_rf1 = mergedCollection.map(function(image) {
   var year = image.get('year');
 
-  var labeledPolygons = gt_polygons_new
-    .filter(ee.Filter.eq('ANIO_FL', year))
-    .map(addType01);
+  var yearPoints = samplePoints.filter(ee.Filter.eq('ANIO_FL', year));
 
-  var classImage = labeledPolygons
-    .reduceToImage({
-      properties: ['type_01'],
-      reducer: ee.Reducer.first()
+  return image.select(BANDS)
+    .sampleRegions({
+      collection : yearPoints,
+      properties : ['type_01', 'ANIO_FL'],
+      scale      : 10,
+      geometries : false
     })
-    .rename('type_01');
-
-  return image.addBands(classImage)
-    .stratifiedSample({
-      numPoints: 5000,
-      classBand: 'type_01',
-      region: labeledPolygons,
-      scale: 10,
-      classValues: [0, 1],
-      classPoints: [15000, 10000],
-      geometries: false,
-      tileScale: 16
-    })
-    .map(function(f) {
-      return f.set('year', year);
-    });
+    .map(function(f) { return f.set('year', year); });
 
 }).flatten();
 
