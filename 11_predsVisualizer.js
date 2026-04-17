@@ -20,8 +20,8 @@
 // =============================================================================
 var ASSET_PREFIX  = 'projects/ee-licanemartinez/assets/Retamap/';
 var RUN_SUFFIX    = '_s1.10k_qs1.0_s0.20k_qs0.0';
-// var years      = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
-var years         = [2023, 2018];
+var years      = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
+// var years         = [2023, 2018];
 var roi           = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
 
 // Set to true only after running the corresponding script
