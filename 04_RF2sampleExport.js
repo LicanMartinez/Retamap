@@ -28,13 +28,13 @@ var BANDS       = ['B2', 'B3', 'B4', 'B8', 'NDYI',
 
 // ── Subclass sample counts (MOD 1) ──────────────────────────────────────────
 // Set a count to 0 to exclude that subclass entirely.
-var N_S1  = 10000;  // stable retama       (category 1)
-var N_QS1 = 0;      // quasi-stable retama (category 2) — 0 to exclude
-var N_S0  = 20000;  // stable background   (category 3)
-var N_QS0 = 0;      // quasi-stable bg     (category 4) — 0 to exclude
+var N_S1  = 15000;  // stable retama       (category 1)
+var N_QS1 = 15000;      // quasi-stable retama (category 2) — 0 to exclude
+var N_S0  = 15000;  // stable background   (category 3)
+var N_QS0 = 15000;      // quasi-stable bg     (category 4) — 0 to exclude
 
 // Suffix template — must reflect the counts above.
-var RUN_SUFFIX = '_s1.10k_qs1.0_s0.20k_qs0.0';
+var RUN_SUFFIX = '_s1.15k_qs1.15k_s0.15k_qs0.15k';
 
 // ── Train / validation split (MOD 5) ────────────────────────────────────────
 var VAL_FRACTION = 0.2;   // fraction of sample points held out for validation
