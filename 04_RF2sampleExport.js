@@ -47,7 +47,7 @@ var COMPLEMENTARY_POLYGONS = ASSET_PREFIX + 'RF2_complementarySamplingStableRegi
 // =============================================================================
 // 1. LOAD ASSETS
 // =============================================================================
-var stableCat = ee.Image(ASSET_PREFIX + '03_RF2_stable_categories').select('stable_class');
+var stableCat = ee.Image(ASSET_PREFIX + '03_RF2_stable_categories_rf1patchFiltered').select('stable_class');
 
 var samplingRegion = roi.geometry().bounds();
 
