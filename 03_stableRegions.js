@@ -89,7 +89,7 @@ var histFC = ee.FeatureCollection(
 if (EXPORT_TO_DRIVE) {
   Export.table.toDrive({
     collection    : histFC,
-    description   : '03_SumOnes_Histogram',
+    description   : '03_SumOnes_Histogram_rf1patchFiltered',
     folder        : DRIVE_FOLDER,
     fileNamePrefix: '03_SumOnes_Histogram_rf1patchFiltered',
     fileFormat    : 'CSV'
