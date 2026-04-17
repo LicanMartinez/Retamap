@@ -30,6 +30,7 @@ var SHOW_RF2_FINAL   = true;   // toggle after 08_RF2patchFilter.js
 
 // Visualization params — only class-1 shown (selfMask removes class-0)
 var visRF1     = {min: 1, max: 1, palette: ['#FFD700']};  // yellow
+var visRF1_raw     = {min: 1, max: 1, palette: ['violet']};  // violet
 var visRF2raw  = {min: 1, max: 1, palette: ['#FF8C00']};  // orange
 var visRF2gf   = {min: 1, max: 1, palette: ['#00BCD4']};  // teal
 var visRF2fin  = {min: 1, max: 1, palette: ['#CC0000']};  // red
@@ -102,7 +103,7 @@ COMPARE_YEARS.forEach(function(year) {
   
   var rf1_raw = ee.Image(ASSET_PREFIX + '02_RF1_raw_prediction_' + year)
     .select('pred').selfMask().clip(roi);
-  Map.addLayer(rf1_raw, visRF1, '[CMP] RF1 raw ' + year, false);
+  Map.addLayer(rf1_raw, visRF1_raw, '[CMP] RF1 raw ' + year, false);
 
   // RF2 raw per suffix
   // COMPARE_SUFFIXES.forEach(function(suffix, idx) {
