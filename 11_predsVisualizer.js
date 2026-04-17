@@ -59,14 +59,14 @@ years.forEach(function(year) {
   var rf2fin = ee.Image(ASSET_PREFIX + '08_RF2_prediction_' + year + RUN_SUFFIX)
     .select('classification').selfMask().clip(roi);
 
-  Map.addLayer(rf1,    visRF1,    'RF1 '         + year, false);
-  Map.addLayer(rf2raw, visRF2raw, 'RF2 raw '     + year, false);
-  if (SHOW_RF2_GAPFILL) {
-    Map.addLayer(rf2gf, visRF2gf, 'RF2 gap-fill ' + year, false);
-  }
-  if (SHOW_RF2_FINAL) {
-    Map.addLayer(rf2fin, visRF2fin, 'RF2 final '  + year, false);
-  }
+  // Map.addLayer(rf1,    visRF1,    'RF1 '         + year, false);
+  // Map.addLayer(rf2raw, visRF2raw, 'RF2 raw '     + year, false);
+  // if (SHOW_RF2_GAPFILL) {
+  //   Map.addLayer(rf2gf, visRF2gf, 'RF2 gap-fill ' + year, false);
+  // }
+  // if (SHOW_RF2_FINAL) {
+  //   Map.addLayer(rf2fin, visRF2fin, 'RF2 final '  + year, false);
+  // }
 });
 
 
@@ -98,19 +98,23 @@ COMPARE_YEARS.forEach(function(year) {
   var rf1 = ee.Image(ASSET_PREFIX + '02_RF1_raw_prediction_' + year)
     .select('pred').selfMask().clip(roi);
   Map.addLayer(rf1, visRF1, '[CMP] RF1 ' + year, false);
+  
+  var rf1_raw = ee.Image(ASSET_PREFIX + '02_RF1_raw_prediction_' + year)
+    .select('pred').selfMask().clip(roi);
+  Map.addLayer(rf1_raw, visRF1, '[CMP] RF1 raw ' + year, false);
 
   // RF2 raw per suffix
-  COMPARE_SUFFIXES.forEach(function(suffix, idx) {
-    var palette = COMPARE_PALETTES[idx % COMPARE_PALETTES.length];
-    var rf2raw = ee.Image(ASSET_PREFIX + '06_RF2_raw_prediction_' + year + suffix)
-      .select('classification').selfMask().clip(roi);
-    Map.addLayer(
-      rf2raw,
-      {min: 1, max: 1, palette: [palette]},
-      '[CMP] RF2 raw ' + year + ' ' + suffix,
-      false
-    );
-  });
+  // COMPARE_SUFFIXES.forEach(function(suffix, idx) {
+  //   var palette = COMPARE_PALETTES[idx % COMPARE_PALETTES.length];
+  //   var rf2raw = ee.Image(ASSET_PREFIX + '06_RF2_raw_prediction_' + year + suffix)
+  //     .select('classification').selfMask().clip(roi);
+  //   Map.addLayer(
+  //     rf2raw,
+  //     {min: 1, max: 1, palette: [palette]},
+  //     '[CMP] RF2 raw ' + year + ' ' + suffix,
+  //     false
+  //   );
+  // });
 });
 
 // =============================================================================
@@ -121,6 +125,6 @@ var valPoints = ee.FeatureCollection(ASSET_PREFIX + '4-Validation_points_complet
 var ctrlPoints   = valPoints.filter(ee.Filter.eq('TIPO', 'ctrl'));
 var retamaPoints = valPoints.filter(ee.Filter.eq('TIPO', 'retama'));
 
-Map.addLayer(ctrlPoints,   {color: 'darkgreen'}, 'Puntos Ctrl');
-Map.addLayer(retamaPoints, {color: 'gold'},       'Puntos Retama');
+Map.addLayer(ctrlPoints,   {color: 'darkgreen'}, 'Puntos Ctrl', false);
+Map.addLayer(retamaPoints, {color: 'gold'},       'Puntos Retama', false);
 Map.setOptions('SATELLITE');
