@@ -19,7 +19,7 @@ var roi         = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
 // =============================================================================
 var predStack = ee.Image(
   exportYears.map(function(year) {
-    return ee.Image(ASSET_PREFIX + '02_RF1_raw_prediction_' + year)
+    return ee.Image(ASSET_PREFIX + 'RF1_prediction_' + year)
     // return ee.Image(ASSET_PREFIX + 'RF1_prediction_' + year)
       .select('pred')
       .rename('pred_' + year);
@@ -235,7 +235,7 @@ Map.onClick(function(coords) {
 Export.image.toAsset({
   image      : stableLayer,
   description: 'Export_03_StableCategories',
-  assetId    : ASSET_PREFIX + '03_RF2_stable_categories',
+  assetId    : ASSET_PREFIX + '03_RF2_stable_categories_rf1patchFiltered',
   region     : roi,
   scale      : 10,
   maxPixels  : 1e13
