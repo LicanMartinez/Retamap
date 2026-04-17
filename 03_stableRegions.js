@@ -246,7 +246,7 @@ if (EXPORT_TO_DRIVE) {
     image         : stableLayer,
     description   : 'Drive_03_StableCategories',
     folder        : DRIVE_FOLDER,
-    fileNamePrefix: '03_RF2_stable_categories',
+    fileNamePrefix: '03_RF2_stable_categories_rf1patchFiltered',
     region        : roi,
     scale         : 10,
     maxPixels     : 1e13,
