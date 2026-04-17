@@ -79,7 +79,8 @@ years.forEach(function(year) {
 // All layers off by default.
 // =============================================================================
 
-var COMPARE_YEARS    = [2023, 2018];
+// var COMPARE_YEARS    = [2023, 2018];
+var COMPARE_YEARS    = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 var COMPARE_SUFFIXES = [
   '_s1.10k_qs1.0_s0.20k_qs0.0',
 ];
