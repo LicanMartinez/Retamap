@@ -121,10 +121,10 @@ var valPoints   = samplePoints.filter(ee.Filter.lt('rand', VAL_FRACTION));
 Map.centerObject(roi, 11);
 
 // Visualize by the 4 specific categories
-Map.addLayer(samplePoints.filter(ee.Filter.eq('stable_class', 1)), {color: '#d62728'}, 'Class 1: Stable Retama');
-Map.addLayer(samplePoints.filter(ee.Filter.eq('stable_class', 2)), {color: '#ff7f0e'}, 'Class 2: Quasi-stable Retama');
-Map.addLayer(samplePoints.filter(ee.Filter.eq('stable_class', 3)), {color: '#1f77b4'}, 'Class 3: Stable Background');
-Map.addLayer(samplePoints.filter(ee.Filter.eq('stable_class', 4)), {color: '#17becf'}, 'Class 4: Quasi-stable Background');
+Map.addLayer(samplePoints.filter(ee.Filter.eq('stable_class', 1)), {color: '#FFB300'}, 'Class 1: Stable Retama');
+Map.addLayer(samplePoints.filter(ee.Filter.eq('stable_class', 2)), {color: '#FFFF99'}, 'Class 2: Quasi-stable Retama');
+Map.addLayer(samplePoints.filter(ee.Filter.eq('stable_class', 3)), {color: '#006400'}, 'Class 3: Stable Background');
+Map.addLayer(samplePoints.filter(ee.Filter.eq('stable_class', 4)), {color: '#90EE90'}, 'Class 4: Quasi-stable Background');
 
 // Visualize by the binary label (includes complementary samples). Hidden by default.
 Map.addLayer(samplePoints.filter(ee.Filter.eq('stable_label', 1)), {color: 'red'}, 'Binary Label: Retama (1)', false);
