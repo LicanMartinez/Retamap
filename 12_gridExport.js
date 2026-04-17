@@ -1,6 +1,6 @@
 // =============================================================================
 // =============================================================================
-// 10: Generate and export a regular grid over the study area
+// 12: Generate and export a regular grid over the study area
 // =============================================================================
 // -----------------------------------------------------------------------------
 // Produces a vector grid (FeatureCollection) covering the bounding box of
@@ -11,9 +11,9 @@
 //                          boundary cells are trimmed, tiny slivers are dropped
 //
 // Output:
-//   Asset  → ASSET_PREFIX + 'grid_' + CELL_SIZE + 'm'        (bbox)
-//          or ASSET_PREFIX + 'grid_' + CELL_SIZE + 'm_clipped' (clipped)
-//   Drive  → same naming, GeoJSON
+//   Asset  → ASSET_PREFIX + '12_grid_' + CELL_SIZE + 'm'         (bbox)
+//          or ASSET_PREFIX + '12_grid_' + CELL_SIZE + 'm_clipped' (clipped)
+//   Drive  → same naming, GeoJSON (if EXPORT_TO_DRIVE = true)
 //
 // Usage: set CELL_SIZE to 1000, 3000, or 7000 (metres) and run.
 // =============================================================================
@@ -22,17 +22,18 @@
 // =============================================================================
 // 0. CONFIGURATION
 // =============================================================================
-var ASSET_PREFIX = 'projects/ee-licanemartinez/assets/Retamap/';
-var DRIVE_FOLDER = 'Retamap/Retamap_GEE_Exports';
+var ASSET_PREFIX    = 'projects/ee-licanemartinez/assets/Retamap/';
+var DRIVE_FOLDER    = 'Retamap/Retamap_GEE_Exports';
+var EXPORT_TO_DRIVE = false;  // toggle: true → also export to Google Drive
 
 // ── Edit these values before running ─────────────────────────────────────────
-var CELL_SIZE    = 3000;   // metres — try 1000, 3000, 7000
-var CLIP_TO_ROI  = true;   // true → clip cells to the actual ROI polygon shape
+var CELL_SIZE   = 3000;   // metres — try 1000, 3000, 7000
+var CLIP_TO_ROI = true;   // true → clip cells to the actual ROI polygon shape
 // ─────────────────────────────────────────────────────────────────────────────
 
 var UTM19S = ee.Projection('EPSG:32719');
 
-var roi = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
+var roi     = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
 var roiGeom = roi.geometry();   // dissolved geometry (may be multi-polygon)
 
 // =============================================================================
@@ -58,20 +59,17 @@ var gridBbox = gridRaw.map(function(cell) {
 var grid;
 
 if (CLIP_TO_ROI) {
-  // Keep only cells that intersect the ROI, then trim their geometry
-  // errorMargin of 1 m; cells that become empty (slivers) are filtered out
-  var MIN_AREA_M2 = CELL_SIZE * CELL_SIZE * 0.01;  // drop cells < 1% of full cell
+  var MIN_AREA_M2 = CELL_SIZE * CELL_SIZE * 0.01;
 
   grid = gridBbox
-    .filterBounds(roiGeom)           // fast pre-filter: discard cells outside
+    .filterBounds(roiGeom)
     .map(function(cell) {
-      var clipped = cell.intersection(roiGeom, ee.ErrorMargin(1, 'meters'));
-      return clipped
-        .set('cell_size_m', CELL_SIZE)
-        .set('grid_id', cell.get('grid_id'))
-        .set('area_m2', clipped.geometry().area(1));
+      var clippedGeom = cell.geometry().intersection(roiGeom, 1);
+      return ee.Feature(clippedGeom)
+        .copyProperties(cell)
+        .set('area_m2', clippedGeom.area(1));
     })
-    .filter(ee.Filter.gt('area_m2', MIN_AREA_M2));  // drop tiny slivers
+    .filter(ee.Filter.gt('area_m2', MIN_AREA_M2));
 
 } else {
   grid = gridBbox;
@@ -93,23 +91,25 @@ if (CLIP_TO_ROI) {
 }
 
 // =============================================================================
-// 5. EXPORT
+// 5. EXPORT (asset name prefix: 12_)
 // =============================================================================
-var suffix      = CLIP_TO_ROI ? '_clipped' : '';
-var exportName  = 'grid_' + CELL_SIZE + 'm' + suffix;
+var clipSuffix = CLIP_TO_ROI ? '_clipped' : '';
+var exportName = '12_grid_' + CELL_SIZE + 'm' + clipSuffix;
 
 // ── 5a. Asset (FeatureCollection) ────────────────────────────────────────────
 Export.table.toAsset({
-  collection:  grid,
+  collection : grid,
   description: exportName + '_asset',
-  assetId:     ASSET_PREFIX + exportName
+  assetId    : ASSET_PREFIX + exportName
 });
 
 // ── 5b. Drive (GeoJSON) ──────────────────────────────────────────────────────
-Export.table.toDrive({
-  collection:     grid,
-  description:    exportName + '_drive',
-  folder:         DRIVE_FOLDER,
-  fileNamePrefix: exportName,
-  fileFormat:     'GeoJSON'
-});
+if (EXPORT_TO_DRIVE) {
+  Export.table.toDrive({
+    collection    : grid,
+    description   : exportName + '_drive',
+    folder        : DRIVE_FOLDER,
+    fileNamePrefix: exportName,
+    fileFormat    : 'GeoJSON'
+  });
+}

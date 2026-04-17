@@ -1,18 +1,25 @@
 // =============================================================================
-// Stable & quasi-stable regions from RF1 prediction assets
+// 03: Stable & quasi-stable regions from RF1 prediction assets
+// Prerequisite : assets 02_RF1_raw_prediction_YYYY  (from 02_RF1fit.js)
+// Produces     : asset 03_RF2_stable_categories
 // =============================================================================
 
-var ASSET_PREFIX = 'projects/ee-licanemartinez/assets/Retamap/';
-var DRIVE_FOLDER = 'Retamap/Retamap_GEE_Exports';
+// =============================================================================
+// 0. CONFIGURATION
+// =============================================================================
+var ASSET_PREFIX    = 'projects/ee-licanemartinez/assets/Retamap/';
+var DRIVE_FOLDER    = 'Retamap/Retamap_GEE_Exports';
+var EXPORT_TO_DRIVE = false;  // toggle: true → also export to Google Drive
+
 var exportYears = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
-var roi = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
+var roi         = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
 
 // =============================================================================
 // 1. LOAD RF1 PREDICTIONS AND STACK AS MULTI-BAND IMAGE
 // =============================================================================
 var predStack = ee.Image(
   exportYears.map(function(year) {
-    return ee.Image(ASSET_PREFIX + 'RF1_prediction_' + year)
+    return ee.Image(ASSET_PREFIX + '02_RF1_raw_prediction_' + year)
       .select('pred')
       .rename('pred_' + year);
   })
@@ -45,7 +52,7 @@ var stableMask      = stable1.or(stable0);
 var quasiStableMask = quasiStable1.or(quasiStable0);
 var combinedMask    = stableMask.or(quasiStableMask);
 
-// Labeled layer: 1=stable-retama, 2=quasi-stable-retama, 
+// Labeled layer: 1=stable-retama, 2=quasi-stable-retama,
 //                3=stable-non-retama, 4=quasi-stable-non-retama
 var stableLayer = ee.Image(0)
   .where(stable0,      3)
@@ -60,33 +67,35 @@ var stableLayer = ee.Image(0)
 // 4. HISTOGRAM OF sumOnes
 // =============================================================================
 var histDict = sumOnes.reduceRegion({
-  reducer: ee.Reducer.frequencyHistogram(),
-  geometry: roi.geometry(),
-  scale: 10,
+  reducer  : ee.Reducer.frequencyHistogram(),
+  geometry : roi.geometry(),
+  scale    : 10,
   maxPixels: 1e13,
   tileScale: 16
 });
 
-// Export CSV
+// Export CSV (03_SumOnes_Histogram)
 var histValues = ee.Dictionary(histDict.get('sum_ones'));
 var histFC = ee.FeatureCollection(
   histValues.keys().map(function(k) {
     return ee.Feature(null, {
-      sum_ones: ee.Number.parse(k),
+      sum_ones   : ee.Number.parse(k),
       pixel_count: histValues.get(k)
     });
   })
 );
 
-Export.table.toDrive({
-  collection    : histFC,
-  description   : 'SumOnes_Histogram',
-  folder        : DRIVE_FOLDER,
-  fileNamePrefix: 'SumOnes_Histogram',
-  fileFormat    : 'CSV'
-});
+if (EXPORT_TO_DRIVE) {
+  Export.table.toDrive({
+    collection    : histFC,
+    description   : '03_SumOnes_Histogram',
+    folder        : DRIVE_FOLDER,
+    fileNamePrefix: '03_SumOnes_Histogram',
+    fileFormat    : 'CSV'
+  });
+}
 
-// Console
+// Console chart
 histDict.evaluate(function(d) {
   var hist = d['sum_ones'];
   var rows = Object.keys(hist)
@@ -115,16 +124,9 @@ histDict.evaluate(function(d) {
 // =============================================================================
 Map.centerObject(roi, 10);
 
-Map.addLayer(sumOnes.selfMask().clip(roi), 
+Map.addLayer(sumOnes.selfMask().clip(roi),
   {min: 0, max: N, palette: ['white', 'yellow', 'orange', 'red', 'darkred']},
   'Sum of RF1=1 across years', false);
-
-// Map.addLayer(stableLayer.selfMask(), {
-//   min: 1, max: 4,
-//   palette: ['#FFB300', '#FFFF99', '#006400', '#90EE90']
-//   // 1=stable retama (orange), 2=quasi-stable retama (pale yellow),
-//   // 3=stable non-retama (dark green), 4=quasi-stable non-retama (pale green)
-// }, 'Stable regions (1=st-ret, 2=qs-ret, 3=st-bg, 4=qs-bg)');
 
 // Individual stable class layers
 Map.addLayer(
@@ -152,7 +154,7 @@ Map.addLayer(
 );
 
 // =============================================================================
-// 6. INSPECTOR: serie temporal RF1 por pixel clickeado (consola)
+// 6. INSPECTOR: anomaly year + click series
 // =============================================================================
 
 // --- 6a. Año atípico en píxeles quasi-estables ---
@@ -198,20 +200,19 @@ Map.addLayer(qs0AnomalyYear,
   'QS0: año atípico con retama (pred=1 único)', false);
 
 // --- 6b. Inspector: serie temporal RF1 por pixel clickeado (consola) ---
-
 Map.onClick(function(coords) {
   var point = ee.Geometry.Point([coords.lon, coords.lat]);
 
   predStack.reduceRegion({
-    reducer: ee.Reducer.first(),
+    reducer : ee.Reducer.first(),
     geometry: point,
-    scale: 10
+    scale   : 10
   }).evaluate(function(result) {
     var rows = exportYears.map(function(year) {
       var val = result['pred_' + year];
       return {
         year: year,
-        RF1: (val !== null && val !== undefined) ? val : 'NA'
+        RF1 : (val !== null && val !== undefined) ? val : 'NA'
       };
     });
     print('RF1 @ lon:' + coords.lon.toFixed(5) + ' lat:' + coords.lat.toFixed(5), rows);
@@ -222,30 +223,32 @@ Map.onClick(function(coords) {
 // =============================================================================
 // 7. EXPORT: 4-category layer (1=s1, 2=qs1, 3=s0, 4=qs0)
 // -----------------------------------------------------------------------------
-// Exporting the categorized layer (instead of a binary label) lets
-// 04_RF2sampleExport.js decide at sampling time which categories to include,
-// without needing to re-run this script.
+// Exporting the categorized layer lets 04_RF2sampleExport.js decide at
+// sampling time which categories to include, without re-running this script.
 // Values: 1 = stable-retama (sumOnes==N)
 //         2 = quasi-stable retama (sumOnes==N-1)
 //         3 = stable-background (sumOnes==0)
 //         4 = quasi-stable background (sumOnes==1)
+// Asset name prefix: 03_
 // =============================================================================
 Export.image.toAsset({
   image      : stableLayer,
-  description: 'Export_StableCategories',
-  assetId    : ASSET_PREFIX + 'RF2_stable_categories',
+  description: 'Export_03_StableCategories',
+  assetId    : ASSET_PREFIX + '03_RF2_stable_categories',
   region     : roi,
   scale      : 10,
   maxPixels  : 1e13
 });
 
-Export.image.toDrive({
-  image         : stableLayer,
-  description   : 'Drive_StableCategories',
-  folder        : DRIVE_FOLDER,
-  fileNamePrefix: 'RF2_stable_categories',
-  region        : roi,
-  scale         : 10,
-  maxPixels     : 1e13,
-  fileFormat    : 'GeoTIFF'
-});
+if (EXPORT_TO_DRIVE) {
+  Export.image.toDrive({
+    image         : stableLayer,
+    description   : 'Drive_03_StableCategories',
+    folder        : DRIVE_FOLDER,
+    fileNamePrefix: '03_RF2_stable_categories',
+    region        : roi,
+    scale         : 10,
+    maxPixels     : 1e13,
+    fileFormat    : 'GeoTIFF'
+  });
+}

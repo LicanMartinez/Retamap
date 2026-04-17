@@ -1,5 +1,6 @@
 // =============================================================================
 // 04: RF2 — Stratified sampling from stable regions + Complementary samples
+//          + Train/Val split for holdout validation
 // =============================================================================
 // Strategy:
 //   1. bounds() on region: eliminates point-in-polygon over 14k vertices
@@ -7,115 +8,165 @@
 //      then sampleRegions per year (point lookups, not a spatial scan)
 //   3. Step 1 at scale:10 over 1 band → pixel centres align with the native
 //      Sentinel-2 grid, no ambiguity in spectral extraction
-//   4. One samplingPoints task + 9 sampleRegions tasks (parallel, lightweight)
-//   5. Complementary samples: sampleRegions over samplingLabel inside polygons
+//   4. One stratifiedSample task + 18 sampleRegions tasks (9 _train + 9 _val)
+//   5. Complementary samples: sampleRegions over binaryLabel inside polygons
+//   6. MOD 1: per-subclass sample counts (N_S1/N_QS1/N_S0/N_QS0)
+//   7. MOD 5: random train/val split before spectral extraction
 // =============================================================================
 
 // =============================================================================
 // 0. CONFIGURATION
 // =============================================================================
-var ASSET_PREFIX  = 'projects/ee-licanemartinez/assets/Retamap/';
-var DRIVE_FOLDER  = 'Retamap/Retamap_GEE_Exports';
-var exportYears   = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
-var roi           = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
-var BANDS         = ['B2', 'B3', 'B4', 'B8', 'NDYI',
-                     'B2_feb', 'B3_feb', 'B4_feb', 'B8_feb', 'NDYI_feb'];
-var N_PER_CLASS   = 10000;
-var RUN_SUFFIX    = '_QS_n10k';
+var ASSET_PREFIX    = 'projects/ee-licanemartinez/assets/Retamap/';
+var DRIVE_FOLDER    = 'Retamap/Retamap_GEE_Exports';
+var EXPORT_TO_DRIVE = false;  // toggle: true → also export to Google Drive
 
-var INCLUDE_S1  = true;
-var INCLUDE_QS1 = true;
-var INCLUDE_S0  = true;
-var INCLUDE_QS0 = true;
+var exportYears = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
+var roi         = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
+var BANDS       = ['B2', 'B3', 'B4', 'B8', 'NDYI',
+                   'B2_feb', 'B3_feb', 'B4_feb', 'B8_feb', 'NDYI_feb'];
 
+// ── Subclass sample counts (MOD 1) ──────────────────────────────────────────
+// Set a count to 0 to exclude that subclass entirely.
+var N_S1  = 10000;  // stable retama       (category 1)
+var N_QS1 = 0;      // quasi-stable retama (category 2) — 0 to exclude
+var N_S0  = 20000;  // stable background   (category 3)
+var N_QS0 = 0;      // quasi-stable bg     (category 4) — 0 to exclude
+
+// Suffix template — must reflect the counts above.
+var RUN_SUFFIX = '_s1.10k_qs1.0_s0.20k_qs0.0';
+
+// ── Train / validation split (MOD 5) ────────────────────────────────────────
+var VAL_FRACTION = 0.2;   // fraction of sample points held out for validation
+var RANDOM_SEED  = 42;
+
+// ── Complementary samples ───────────────────────────────────────────────────
 var USE_COMPLEMENTARY      = false;
 var COMPLEMENTARY_POLYGONS = ASSET_PREFIX + 'RF2_complementarySamplingStableRegions_kmsBari';
 
 // =============================================================================
 // 1. LOAD ASSETS
 // =============================================================================
-var stableCat = ee.Image(ASSET_PREFIX + 'RF2_stable_categories').select('stable_class');
+var stableCat = ee.Image(ASSET_PREFIX + '03_RF2_stable_categories').select('stable_class');
 
 var samplingRegion = roi.geometry().bounds();
 
 // =============================================================================
-// 2. BUILD SAMPLING LABEL
+// 2. BUILD classValues / classPoints (skipping categories with count == 0)
 // =============================================================================
-var mask1 = ee.Image(0).byte();
-var mask0 = ee.Image(0).byte();
-
-if (INCLUDE_S1)  mask1 = mask1.or(stableCat.eq(1));
-if (INCLUDE_QS1) mask1 = mask1.or(stableCat.eq(2));
-if (INCLUDE_S0)  mask0 = mask0.or(stableCat.eq(3));
-if (INCLUDE_QS0) mask0 = mask0.or(stableCat.eq(4));
-
-var samplingLabel = ee.Image(0).byte()
-  .where(mask0, 0)
-  .where(mask1, 1)
-  .updateMask(mask1.or(mask0))
-  .rename('stable_label');
+var classValues = [];
+var classPoints = [];
+if (N_S1  > 0) { classValues.push(1); classPoints.push(N_S1);  }
+if (N_QS1 > 0) { classValues.push(2); classPoints.push(N_QS1); }
+if (N_S0  > 0) { classValues.push(3); classPoints.push(N_S0);  }
+if (N_QS0 > 0) { classValues.push(4); classPoints.push(N_QS0); }
 
 // =============================================================================
 // 3. STEP 1: SAMPLING LOCATIONS (1 band, scale:10, executed once)
 // =============================================================================
-var samplePoints = samplingLabel.stratifiedSample({
-  numPoints   : N_PER_CLASS,
-  classBand   : 'stable_label',
-  region      : samplingRegion,
-  scale       : 10,
-  classValues : [0, 1],
-  classPoints : [N_PER_CLASS, N_PER_CLASS],
-  geometries  : true,
-  tileScale   : 16
+var samplePoints = stableCat.stratifiedSample({
+  numPoints  : 0,
+  classBand  : 'stable_class',
+  region     : samplingRegion,
+  scale      : 10,
+  classValues: classValues,
+  classPoints: classPoints,
+  geometries : true,
+  tileScale  : 16
+});
+
+// Remap 4 categories → binary label for downstream RF2 training compatibility:
+// categories 1 & 2 (retama) → 1,  categories 3 & 4 (background) → 0
+samplePoints = samplePoints.map(function(f) {
+  var sc = ee.Number(f.get('stable_class'));
+  return f.set('stable_label', ee.Algorithms.If(sc.lte(2), 1, 0));
 });
 
 // =============================================================================
 // 3.5. COMPLEMENTARY SAMPLES (sampleRegions within polygons)
 // -----------------------------------------------------------------------------
-// Extracts samplingLabel values only for unmasked pixels that fall inside
-// the compPolys geometries. These points are merged into samplePoints before
-// the per-year spectral extraction (Step 2), enriching coverage in areas
-// that stratifiedSample may under-represent.
+// Uses a binary label derived from stableCat for compatibility with Step 2.
 // =============================================================================
 if (USE_COMPLEMENTARY) {
   var compPolys = ee.FeatureCollection(COMPLEMENTARY_POLYGONS);
 
-  var compPoints = samplingLabel.sampleRegions({
-    collection  : compPolys,
-    scale       : 10,
-    geometries  : true,
-    tileScale   : 16
+  // Binary label for complementary sampleRegions
+  var binaryLabel = stableCat.remap([1, 2, 3, 4], [1, 1, 0, 0]).rename('stable_label');
+
+  var compPoints = binaryLabel.sampleRegions({
+    collection: compPolys,
+    scale     : 10,
+    geometries: true,
+    tileScale : 16
   });
 
   samplePoints = samplePoints.merge(compPoints);
 }
 
 // =============================================================================
-// 4. STEP 2: SPECTRAL EXTRACTION PER YEAR (sampleRegions, parallel tasks)
+// 4. TRAIN / VALIDATION SPLIT (MOD 5)
+// -----------------------------------------------------------------------------
+// Split happens BEFORE spectral extraction so the same spatial points are used
+// consistently across all 9 years. Each year produces two exports: _train and
+// _val. Script 05 uses only _train; script 09 uses _val for holdout evaluation.
+// =============================================================================
+samplePoints = samplePoints.randomColumn('rand', RANDOM_SEED);
+var trainPoints = samplePoints.filter(ee.Filter.gte('rand', VAL_FRACTION));
+var valPoints   = samplePoints.filter(ee.Filter.lt('rand', VAL_FRACTION));
+
+// =============================================================================
+// 5. STEP 2: SPECTRAL EXTRACTION PER YEAR (sampleRegions, parallel tasks)
 // =============================================================================
 exportYears.forEach(function(year) {
-  var samples = ee.Image(ASSET_PREFIX + 'MergedBands_' + year)
-    .select(BANDS)
-    .sampleRegions({
-      collection  : samplePoints,
-      properties  : ['stable_label'],
-      scale       : 10,
-      geometries  : true,
-      tileScale   : 16
-    })
-    .map(function(f) { return f.set('year', year); });
+  var img = ee.Image(ASSET_PREFIX + '01_MergedBands_' + year).select(BANDS);
+
+  // ── Train samples ──────────────────────────────────────────────────────────
+  var trainSamples = img.sampleRegions({
+    collection: trainPoints,
+    properties: ['stable_label'],
+    scale     : 10,
+    geometries: true,
+    tileScale : 16
+  }).map(function(f) { return f.set('year', year); });
 
   Export.table.toAsset({
-    collection  : samples,
-    description : 'Export_RF2_samples_' + year + RUN_SUFFIX,
-    assetId     : ASSET_PREFIX + 'RF2_samples_' + year + RUN_SUFFIX
+    collection : trainSamples,
+    description: 'Export_04_RF2_samples_' + year + RUN_SUFFIX + '_train',
+    assetId    : ASSET_PREFIX + '04_RF2_samples_' + year + RUN_SUFFIX + '_train'
   });
 
-  Export.table.toDrive({
-    collection     : samples,
-    description    : 'Drive_RF2_samples_' + year + RUN_SUFFIX,
-    folder         : DRIVE_FOLDER,
-    fileNamePrefix : 'RF2_samples_' + year + RUN_SUFFIX,
-    fileFormat     : 'CSV'
+  if (EXPORT_TO_DRIVE) {
+    Export.table.toDrive({
+      collection    : trainSamples,
+      description   : 'Drive_04_RF2_samples_' + year + RUN_SUFFIX + '_train',
+      folder        : DRIVE_FOLDER,
+      fileNamePrefix: '04_RF2_samples_' + year + RUN_SUFFIX + '_train',
+      fileFormat    : 'CSV'
+    });
+  }
+
+  // ── Val samples ────────────────────────────────────────────────────────────
+  var valSamples = img.sampleRegions({
+    collection: valPoints,
+    properties: ['stable_label'],
+    scale     : 10,
+    geometries: true,
+    tileScale : 16
+  }).map(function(f) { return f.set('year', year); });
+
+  Export.table.toAsset({
+    collection : valSamples,
+    description: 'Export_04_RF2_samples_' + year + RUN_SUFFIX + '_val',
+    assetId    : ASSET_PREFIX + '04_RF2_samples_' + year + RUN_SUFFIX + '_val'
   });
+
+  if (EXPORT_TO_DRIVE) {
+    Export.table.toDrive({
+      collection    : valSamples,
+      description   : 'Drive_04_RF2_samples_' + year + RUN_SUFFIX + '_val',
+      folder        : DRIVE_FOLDER,
+      fileNamePrefix: '04_RF2_samples_' + year + RUN_SUFFIX + '_val',
+      fileFormat    : 'CSV'
+    });
+  }
 });

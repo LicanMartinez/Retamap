@@ -8,8 +8,9 @@
 // =============================================================================
 // 0. CONFIGURATION
 // =============================================================================
-var ASSET_PREFIX = 'projects/ee-licanemartinez/assets/Retamap/';
-var DRIVE_FOLDER = 'Retamap/Retamap_GEE_Exports';
+var ASSET_PREFIX   = 'projects/ee-licanemartinez/assets/Retamap/';
+var DRIVE_FOLDER   = 'Retamap/Retamap_GEE_Exports';
+var EXPORT_TO_DRIVE = false;  // toggle: true → also export to Google Drive
 
 var years         = ee.List.sequence(2017, 2026);
 var years_toMerge = ee.List.sequence(2017, 2025);
@@ -100,26 +101,30 @@ var mergedCollection = ee.ImageCollection(years_toMerge.map(mergeFebWithNovDec))
 // =============================================================================
 // 5. EXPORT mergedCollection TO ASSET
 // Final band schema: B2, B3, B4, B8, NDYI, year, B2_feb, B3_feb, B4_feb, B8_feb, NDYI_feb
+// Asset name prefix: 01_
 // =============================================================================
 exportYears.forEach(function(year) {
   var img = mergedCollection.filter(ee.Filter.eq('year', year)).first();
+
   Export.image.toAsset({
-    image: img,
-    description: 'MergedBands_' + year,
-    assetId: ASSET_PREFIX + 'MergedBands_' + year,
-    region: roi,
-    scale: 10,
-    maxPixels: 1e13
+    image      : img,
+    description: 'Export_01_MergedBands_' + year,
+    assetId    : ASSET_PREFIX + '01_MergedBands_' + year,
+    region     : roi,
+    scale      : 10,
+    maxPixels  : 1e13
   });
 
-  Export.image.toDrive({
-    image         : img,
-    description   : 'Drive_MergedBands_' + year,
-    folder        : DRIVE_FOLDER,
-    fileNamePrefix: 'MergedBands_' + year,
-    region        : roi,
-    scale         : 10,
-    maxPixels     : 1e13,
-    fileFormat    : 'GeoTIFF'
-  });
+  if (EXPORT_TO_DRIVE) {
+    Export.image.toDrive({
+      image         : img,
+      description   : 'Drive_01_MergedBands_' + year,
+      folder        : DRIVE_FOLDER,
+      fileNamePrefix: '01_MergedBands_' + year,
+      region        : roi,
+      scale         : 10,
+      maxPixels     : 1e13,
+      fileFormat    : 'GeoTIFF'
+    });
+  }
 });

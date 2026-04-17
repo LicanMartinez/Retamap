@@ -1,29 +1,30 @@
 // =============================================================================
 // 02: RF1 training, prediction, and export to asset
-// Runs after 01_generate_sentinel_mosaic.js assets are exported
+// Runs after 01_sentinelMosaic.js assets are exported
 // =============================================================================
 
 // =============================================================================
 // 0. CONFIGURATION
 // =============================================================================
-var ASSET_PREFIX = 'projects/ee-licanemartinez/assets/Retamap/';
-var DRIVE_FOLDER = 'Retamap/Retamap_GEE_Exports';
+var ASSET_PREFIX    = 'projects/ee-licanemartinez/assets/Retamap/';
+var DRIVE_FOLDER    = 'Retamap/Retamap_GEE_Exports';
+var EXPORT_TO_DRIVE = false;  // toggle: true → also export to Google Drive
 
 var exportYears = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 
-var roi          = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
-var gt_polygons_new = ee.FeatureCollection(ASSET_PREFIX + 'gt_polys_6_ctrlReduce_moreCtrls_refineRetamas');  
+var roi             = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
+var gt_polygons_new = ee.FeatureCollection(ASSET_PREFIX + 'gt_polys_6_ctrlReduce_moreCtrls_refineRetamas');
 
-// Band schema from phase 1:
+// Band schema from 01_sentinelMosaic.js:
 // B2, B3, B4, B8, NDYI, B2_feb, B3_feb, B4_feb, B8_feb, NDYI_feb
 var BANDS = ['B2', 'B3', 'B4', 'B8', 'NDYI', 'B2_feb', 'B3_feb', 'B4_feb', 'B8_feb', 'NDYI_feb'];
 
 // =============================================================================
-// 1. LOAD mergedCollection FROM ASSETS
+// 1. LOAD mergedCollection FROM ASSETS (01_MergedBands_YYYY)
 // =============================================================================
 var mergedCollection = ee.ImageCollection.fromImages(
   exportYears.map(function(year) {
-    return ee.Image(ASSET_PREFIX + 'MergedBands_' + year).set('year', year);
+    return ee.Image(ASSET_PREFIX + '01_MergedBands_' + year).set('year', year);
   })
 );
 
@@ -98,44 +99,23 @@ var samples_rf1 = mergedCollection.map(function(image) {
 // 4. TRAIN RF1
 // =============================================================================
 var rf1 = ee.Classifier.smileRandomForest({numberOfTrees: 500}).train({
-  features: samples_rf1,
-  classProperty: 'type_01',
+  features       : samples_rf1,
+  classProperty  : 'type_01',
   inputProperties: BANDS
 });
 
 // =============================================================================
-// 5. PREDICT + CONNECTED PIXEL FILTER
+// 5. PREDICT
 // =============================================================================
 var predictRF1 = function(image) {
   var pred = image.select(BANDS).classify(rf1).rename('pred');
-
-  // // Connected pixel filter applied only to class-1 patches.
-  // // selfMask() makes class-0 pixels nodata temporarily so connectedPixelCount
-  // // counts only retama (1) pixels. connected is nodata where pred=0.
-  // var connected = pred.selfMask().connectedPixelCount(50, true);  // 8-connected
-
-  // // Small class-1 patches (< 5 pixels) are reclassified to 0 instead of
-  // // becoming nodata. Class-0 pixels are preserved as-is.
-  // // connected.unmask(0): for class-0 pixels (where connected=nodata), unmask
-  // // gives 0, but pred.eq(1) is false there, so the where() condition is false
-  // // and class-0 pixels are untouched.
-  // var predClean = pred
-  //   .where(
-  //     pred.eq(1).and(connected.unmask(0).lt(5)),
-  //     0
-  //   )
-  //   .rename('pred');
-
-  // return predClean.set('year', image.get('year'));
-  
   return pred.set('year', image.get('year'));
-  
 };
 
 var preds_collection = mergedCollection.map(predictRF1);
 
 // =============================================================================
-// 6. EXPORT RF1 PREDICTIONS TO ASSET
+// 6. EXPORT RF1 PREDICTIONS TO ASSET (02_RF1_raw_prediction_YYYY)
 // =============================================================================
 exportYears.forEach(function(year) {
   var img = ee.Image(
@@ -143,22 +123,24 @@ exportYears.forEach(function(year) {
   ).select('pred').clip(roi).uint8();
 
   Export.image.toAsset({
-    image: img,
-    description: 'Export_RF1_raw' + year,
-    assetId: ASSET_PREFIX + 'RF1_raw_prediction_' + year,
-    region: roi,
-    scale: 10,
-    maxPixels: 1e13
+    image      : img,
+    description: 'Export_02_RF1_raw_' + year,
+    assetId    : ASSET_PREFIX + '02_RF1_raw_prediction_' + year,
+    region     : roi,
+    scale      : 10,
+    maxPixels  : 1e13
   });
 
-  Export.image.toDrive({
-    image         : img,
-    description   : 'Drive_RF1_' + year,
-    folder        : DRIVE_FOLDER,
-    fileNamePrefix: 'RF1_raw_prediction_' + year,
-    region        : roi,
-    scale         : 10,
-    maxPixels     : 1e13,
-    fileFormat    : 'GeoTIFF'
-  });
+  if (EXPORT_TO_DRIVE) {
+    Export.image.toDrive({
+      image         : img,
+      description   : 'Drive_02_RF1_raw_' + year,
+      folder        : DRIVE_FOLDER,
+      fileNamePrefix: '02_RF1_raw_prediction_' + year,
+      region        : roi,
+      scale         : 10,
+      maxPixels     : 1e13,
+      fileFormat    : 'GeoTIFF'
+    });
+  }
 });

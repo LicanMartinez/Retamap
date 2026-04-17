@@ -1,32 +1,36 @@
 // =============================================================================
-// 07: RF2 — Patch filter on raw predictions → final RF2 assets
+// 08: RF2 — Patch filter on gap-filled predictions → final RF2 assets
 // -----------------------------------------------------------------------------
-// Prerequisite : assets RF2_raw_prediction_YYYY  (from 06_RF2predict.js)
-// Produces     : assets RF2_prediction_YYYY  (uint8, patch-filtered)
+// Prerequisite : assets 07_RF2_gapFill_YYYY{SUFFIX}  (from 07_RF2gapFill.js)
+// Produces     : assets 08_RF2_prediction_YYYY{SUFFIX}  (uint8, patch-filtered)
 // -----------------------------------------------------------------------------
 // Applying connectedPixelCount on already-materialised rasters is much cheaper
 // than applying it inside the classification graph: GEE only needs to solve the
 // neighbourhood topology on a simple binary image, not re-run the RF classifier
 // for each tile's extended neighbourhood.
+// Input changed from 06_RF2_raw to 07_RF2_gapFill so the patch filter works
+// on temporally-corrected predictions.
 // =============================================================================
 
 // =============================================================================
 // 0. CONFIGURATION
 // =============================================================================
-var ASSET_PREFIX  = 'projects/ee-licanemartinez/assets/Retamap/';
-var DRIVE_FOLDER  = 'Retamap/Retamap_GEE_Exports';
+var ASSET_PREFIX    = 'projects/ee-licanemartinez/assets/Retamap/';
+var DRIVE_FOLDER    = 'Retamap/Retamap_GEE_Exports';
+var EXPORT_TO_DRIVE = false;  // toggle: true → also export to Google Drive
+
 var exportYears   = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 var roi           = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
 var MIN_PATCH_PIX = 5;   // minimum connected-pixel count for class-1 patches
 var MAX_NEIGHBORS = 50;  // neighbourhood radius for connectedPixelCount
-var RUN_SUFFIX    = '_QS_n10k_compSamp';
+var RUN_SUFFIX    = '_s1.10k_qs1.0_s0.20k_qs0.0';
 
 // =============================================================================
-// 1. LOAD RAW PREDICTIONS
+// 1. LOAD GAP-FILLED PREDICTIONS (07_RF2_gapFill_YYYY)
 // =============================================================================
-var rawCollection = ee.ImageCollection.fromImages(
+var gapFillCollection = ee.ImageCollection.fromImages(
   exportYears.map(function(year) {
-    return ee.Image(ASSET_PREFIX + 'RF2_raw_prediction_' + year + RUN_SUFFIX).set('year', year);
+    return ee.Image(ASSET_PREFIX + '07_RF2_gapFill_' + year + RUN_SUFFIX).set('year', year);
   })
 );
 
@@ -58,30 +62,30 @@ var applyPatchFilter = function(image) {
     .set('year', image.get('year'));
 };
 
-var filteredCollection = rawCollection.map(applyPatchFilter);
+var filteredCollection = gapFillCollection.map(applyPatchFilter);
 
 // =============================================================================
-// 3. VISUALIZATION
+// 3. VISUALIZATION — gap-filled vs final (patch-filtered)
 // =============================================================================
 Map.centerObject(roi, 10);
 
 exportYears.forEach(function(year) {
-  // Raw (before filter) — useful for comparison
+  // Gap-filled (before patch filter) — useful for comparison
   Map.addLayer(
-    ee.Image(rawCollection.filter(ee.Filter.eq('year', year)).first()).clip(roi),
+    ee.Image(gapFillCollection.filter(ee.Filter.eq('year', year)).first()).clip(roi),
     {min: 0, max: 1, palette: ['#d3d3d3', '#2d9c00']},
-    'RF2 raw ' + year, false
+    'RF2 gap-fill ' + year, false
   );
-  // Filtered (final)
+  // Final (patch-filtered)
   Map.addLayer(
     ee.Image(filteredCollection.filter(ee.Filter.eq('year', year)).first()).clip(roi),
-    {min: 0, max: 1, palette: ['#d3d3d3', '#2d9c00']},
-    'RF2 ' + year, false
+    {min: 0, max: 1, palette: ['#d3d3d3', '#CC0000']},
+    'RF2 final ' + year, false
   );
 });
 
 // =============================================================================
-// 4. EXPORT FINAL PREDICTIONS PER YEAR
+// 4. EXPORT FINAL PREDICTIONS PER YEAR (08_RF2_prediction_YYYY{SUFFIX})
 // =============================================================================
 exportYears.forEach(function(year) {
   var img = ee.Image(
@@ -90,21 +94,23 @@ exportYears.forEach(function(year) {
 
   Export.image.toAsset({
     image      : img,
-    description: 'Export_RF2_' + year + RUN_SUFFIX,
-    assetId    : ASSET_PREFIX + 'RF2_prediction_' + year + RUN_SUFFIX,
+    description: 'Export_08_RF2_' + year + RUN_SUFFIX,
+    assetId    : ASSET_PREFIX + '08_RF2_prediction_' + year + RUN_SUFFIX,
     region     : roi,
     scale      : 10,
     maxPixels  : 1e13
   });
 
-  Export.image.toDrive({
-    image          : img,
-    description    : 'Drive_RF2_' + year + RUN_SUFFIX,
-    folder         : DRIVE_FOLDER,
-    fileNamePrefix : 'RF2_prediction_' + year + RUN_SUFFIX,
-    region         : roi,
-    scale          : 10,
-    maxPixels      : 1e13,
-    fileFormat     : 'GeoTIFF'
-  });
+  if (EXPORT_TO_DRIVE) {
+    Export.image.toDrive({
+      image         : img,
+      description   : 'Drive_08_RF2_' + year + RUN_SUFFIX,
+      folder        : DRIVE_FOLDER,
+      fileNamePrefix: '08_RF2_prediction_' + year + RUN_SUFFIX,
+      region        : roi,
+      scale         : 10,
+      maxPixels     : 1e13,
+      fileFormat    : 'GeoTIFF'
+    });
+  }
 });

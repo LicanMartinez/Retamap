@@ -1,13 +1,13 @@
 // =============================================================================
-// 05: RF2 — Train classifier from per-year sample assets → export classifier
+// 05: RF2 — Train classifier from per-year _train sample assets → export classifier
 // -----------------------------------------------------------------------------
-// Prerequisite : assets RF2_samples_YYYY  (from 04_RF2sampleExport.js)
-// Produces     : asset RF2_classifier
+// Prerequisite : assets 04_RF2_samples_YYYY{SUFFIX}_train  (from 04_RF2sampleExport.js)
+// Produces     : asset 05_RF2_classifier{SUFFIX}
 // -----------------------------------------------------------------------------
 // Exporting the trained classifier as an asset means the downstream prediction
 // script (06_RF2predict.js) loads it with ee.Classifier.load() instead of
-// re-training. Each export task in 06 pays only the cost of classification,
-// not re-training.
+// re-training. Each export task in 06 pays only the cost of classification.
+// Validation (holdout) is handled in 09_holdoutValidation.js using _val assets.
 // =============================================================================
 
 // =============================================================================
@@ -16,22 +16,22 @@
 var ASSET_PREFIX = 'projects/ee-licanemartinez/assets/Retamap/';
 var exportYears  = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 var BANDS        = ['B2', 'B3', 'B4', 'B8', 'NDYI', 'B2_feb', 'B3_feb', 'B4_feb', 'B8_feb', 'NDYI_feb'];
-var RUN_SUFFIX   = '_QS_n10k';
+var RUN_SUFFIX   = '_s1.10k_qs1.0_s0.20k_qs0.0';
 
 // =============================================================================
-// 1. LOAD AND MERGE PER-YEAR SAMPLE ASSETS
+// 1. LOAD AND MERGE PER-YEAR TRAIN SAMPLE ASSETS
 // -----------------------------------------------------------------------------
-// 04_RF2sampleExport.js exports one asset per year.
+// 04_RF2sampleExport.js exports one _train asset per year.
 // Flatten merges them into a single FeatureCollection for training.
 // =============================================================================
 var samples_rf2 = ee.FeatureCollection(
   exportYears.map(function(y) {
-    return ee.FeatureCollection(ASSET_PREFIX + 'RF2_samples_' + y + RUN_SUFFIX);
+    return ee.FeatureCollection(ASSET_PREFIX + '04_RF2_samples_' + y + RUN_SUFFIX + '_train');
   })
 ).flatten();
 
 // =============================================================================
-// 2. TRAIN RF2 (all samples — validation is handled externally in 08)
+// 2. TRAIN RF2 (train samples only — holdout validation in 09_holdoutValidation.js)
 // =============================================================================
 print('Train samples:', samples_rf2.size());
 
@@ -46,12 +46,12 @@ var variableImportance = ee.Dictionary(dict.get('importance'));
 print('variableImportance:', variableImportance);
 
 // =============================================================================
-// 3. EXPORT CLASSIFIER AS ASSET
+// 3. EXPORT CLASSIFIER AS ASSET (05_RF2_classifier{SUFFIX})
 // -----------------------------------------------------------------------------
 // ee.Classifier can only be exported to Asset (no Drive equivalent).
 // =============================================================================
 Export.classifier.toAsset({
   classifier : rf2,
-  description: 'Export_RF2_classifier' + RUN_SUFFIX,
-  assetId    : ASSET_PREFIX + 'RF2_classifier' + RUN_SUFFIX
+  description: 'Export_05_RF2_classifier' + RUN_SUFFIX,
+  assetId    : ASSET_PREFIX + '05_RF2_classifier' + RUN_SUFFIX
 });
