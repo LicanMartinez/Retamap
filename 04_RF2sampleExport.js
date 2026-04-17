@@ -103,6 +103,7 @@ if (USE_COMPLEMENTARY) {
   samplePoints = samplePoints.merge(compPoints);
 }
 
+
 // =============================================================================
 // 4. TRAIN / VALIDATION SPLIT (MOD 5)
 // -----------------------------------------------------------------------------
@@ -113,6 +114,23 @@ if (USE_COMPLEMENTARY) {
 samplePoints = samplePoints.randomColumn('rand', RANDOM_SEED);
 var trainPoints = samplePoints.filter(ee.Filter.gte('rand', VAL_FRACTION));
 var valPoints   = samplePoints.filter(ee.Filter.lt('rand', VAL_FRACTION));
+
+// =============================================================================
+// 4.5. MAP VISUALIZATION OF SAMPLE POINTS
+// =============================================================================
+Map.centerObject(roi, 11);
+
+// Visualize by the 4 specific categories
+Map.addLayer(samplePoints.filter(ee.Filter.eq('stable_class', 1)), {color: '#d62728'}, 'Class 1: Stable Retama');
+Map.addLayer(samplePoints.filter(ee.Filter.eq('stable_class', 2)), {color: '#ff7f0e'}, 'Class 2: Quasi-stable Retama');
+Map.addLayer(samplePoints.filter(ee.Filter.eq('stable_class', 3)), {color: '#1f77b4'}, 'Class 3: Stable Background');
+Map.addLayer(samplePoints.filter(ee.Filter.eq('stable_class', 4)), {color: '#17becf'}, 'Class 4: Quasi-stable Background');
+
+// Visualize by the binary label (includes complementary samples). Hidden by default.
+Map.addLayer(samplePoints.filter(ee.Filter.eq('stable_label', 1)), {color: 'red'}, 'Binary Label: Retama (1)', false);
+Map.addLayer(samplePoints.filter(ee.Filter.eq('stable_label', 0)), {color: 'blue'}, 'Binary Label: Background (0)', false);
+
+
 
 // =============================================================================
 // 5. STEP 2: SPECTRAL EXTRACTION PER YEAR (sampleRegions, parallel tasks)
