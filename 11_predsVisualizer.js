@@ -97,9 +97,9 @@ var COMPARE_PALETTES = [
 
 COMPARE_YEARS.forEach(function(year) {
   // RF1 — shown once per year regardless of suffix list
-  var rf1 = ee.Image(ASSET_PREFIX + 'RF1_prediction_' + year)
+  var rf1 = ee.Image(ASSET_PREFIX + '02_RF1_prediction_connectedFilter_' + year)
     .select('pred').selfMask().clip(roi);
-  Map.addLayer(rf1, visRF1, '[CMP] RF1 ' + year, false);
+  Map.addLayer(rf1, visRF1, '[CMP] RF1 conn' + year, false);
   
   var rf1_raw = ee.Image(ASSET_PREFIX + '02_RF1_raw_prediction_' + year)
     .select('pred').selfMask().clip(roi);
