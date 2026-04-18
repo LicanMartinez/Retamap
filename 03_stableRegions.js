@@ -19,7 +19,7 @@ var roi         = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
 // =============================================================================
 var predStack = ee.Image(
   exportYears.map(function(year) {
-    return ee.Image(ASSET_PREFIX + 'RF1_prediction_' + year)
+    return ee.Image(ASSET_PREFIX + '02_RF1_prediction_connectedFilter_' + year)
     // return ee.Image(ASSET_PREFIX + 'RF1_prediction_' + year)
       .select('pred')
       .rename('pred_' + year);
@@ -124,6 +124,8 @@ histDict.evaluate(function(d) {
 // 5. VISUALIZATION
 // =============================================================================
 // Map.centerObject(roi, 10);
+
+Map.setOptions('SATELLITE')
 
 Map.addLayer(sumOnes.selfMask().clip(roi),
   {min: 0, max: N, palette: ['white', 'yellow', 'orange', 'red', 'darkred']},
