@@ -14,7 +14,8 @@ var exportYears = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 
 var roi             = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
 var gt_polygons_new = ee.FeatureCollection(ASSET_PREFIX + 'gt_polys_6_ctrlReduce_moreCtrls_refineRetamas');
-var compBackgroundPolys = ee.FeatureCollection(ASSET_PREFIX + 'compBackgroundPolys'); // Nuevo asset
+var compBackgroundPolys = ee.FeatureCollection(ASSET_PREFIX + 'compBackgroundPolys'); // polys complementarios ctrl
+var INCLUDE_COMP_POLYS = true; // Toggle para incluir compBackgroundPolys
 
 var BANDS = ['B2', 'B3', 'B4', 'B8', 'NDYI', 'B2_feb', 'B3_feb', 'B4_feb', 'B8_feb', 'NDYI_feb'];
 
@@ -141,7 +142,7 @@ exportYears.forEach(function(year) {
   Export.image.toAsset({
     image      : img,
     description: 'Export_02_RF1.2_raw_' + year,
-    assetId    : ASSET_PREFIX + '02_RF1.2_prediction_connectedFilter_' + year,
+    assetId    : ASSET_PREFIX + '02_RF1_2compCTRL_prediction_connectedFilter_' + year,
     region     : roi,
     scale      : 10,
     maxPixels  : 1e13
@@ -152,7 +153,7 @@ exportYears.forEach(function(year) {
       image         : img,
       description   : 'Drive_02_RF1_raw_' + year,
       folder        : DRIVE_FOLDER,
-      fileNamePrefix: '02_RF1.2_prediction_connectedFilter_' + year,
+      fileNamePrefix: '02_RF1_2compCTRL_prediction_connectedFilter_' + year,
       region        : roi,
       scale         : 10,
       maxPixels     : 1e13,
