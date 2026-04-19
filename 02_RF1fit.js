@@ -45,10 +45,15 @@ var formatCompPolys = function(feature) {
 };
 
 var labeledGtPolygons = gt_polygons_new.map(addType01);
-var labeledCompPolys = compBackgroundPolys.map(formatCompPolys);
+var labeledPolygons; // Declaración de la variable para el scope global
 
-// Unir ambas colecciones
-var labeledPolygons = labeledGtPolygons.merge(labeledCompPolys);
+// Condición controlada por el toggle para incluir o no los polígonos complementarios
+if (INCLUDE_COMP_POLYS) {
+  var labeledCompPolys = compBackgroundPolys.map(formatCompPolys);
+  labeledPolygons = labeledGtPolygons.merge(labeledCompPolys);
+} else {
+  labeledPolygons = labeledGtPolygons;
+}
 
 // =============================================================================
 // 3. STRATIFIED SAMPLING
