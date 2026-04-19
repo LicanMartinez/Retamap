@@ -8,17 +8,14 @@
 // =============================================================================
 var ASSET_PREFIX    = 'projects/ee-licanemartinez/assets/Retamap/';
 var DRIVE_FOLDER    = 'Retamap/Retamap_GEE_Exports';
-var EXPORT_TO_DRIVE = false;  // toggle: true → also export to Google Drive
-
-// Nuevo toggle para el filtro de píxeles conectados
-var APPLY_PIXEL_FILTER = true; // toggle: true → aplica el filtro para remover parches < 5 px
-
+var EXPORT_TO_DRIVE = false; 
+var APPLY_PIXEL_FILTER = true; 
 var exportYears = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 
 var roi             = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
 var gt_polygons_new = ee.FeatureCollection(ASSET_PREFIX + 'gt_polys_6_ctrlReduce_moreCtrls_refineRetamas');
+var compBackgroundPolys = ee.FeatureCollection(ASSET_PREFIX + 'compBackgroundPolys'); // Nuevo asset
 
-// Band schema from 01_sentinelMosaic.js:
 var BANDS = ['B2', 'B3', 'B4', 'B8', 'NDYI', 'B2_feb', 'B3_feb', 'B4_feb', 'B8_feb', 'NDYI_feb'];
 
 // =============================================================================
@@ -31,7 +28,7 @@ var mergedCollection = ee.ImageCollection.fromImages(
 );
 
 // =============================================================================
-// 2. LABEL FUNCTION
+// 2. LABEL FUNCTION AND MERGE
 // =============================================================================
 var addType01 = function(feature) {
   var label = ee.Algorithms.If(
@@ -40,13 +37,23 @@ var addType01 = function(feature) {
   return feature.set('type_01', label);
 };
 
+// Formatear polígonos complementarios para asegurar compatibilidad de propiedades
+var formatCompPolys = function(feature) {
+  // Asignamos type_01 = 0 y un ANIO_FL = 0 (valor dummy, no se filtrará luego)
+  return feature.set('type_01', 0).set('ANIO_FL', 0);
+};
+
+var labeledGtPolygons = gt_polygons_new.map(addType01);
+var labeledCompPolys = compBackgroundPolys.map(formatCompPolys);
+
+// Unir ambas colecciones
+var labeledPolygons = labeledGtPolygons.merge(labeledCompPolys);
+
 // =============================================================================
-// 3. STRATIFIED SAMPLING (two-step: fixed N points → per-year pixel lookup)
+// 3. STRATIFIED SAMPLING
 // =============================================================================
 var N_CTRL   = 15000;
 var N_RETAMA = 10000;
-
-var labeledPolygons = gt_polygons_new.map(addType01);
 
 var imgType = labeledPolygons.reduceToImage({
   properties: ['type_01'],
@@ -74,7 +81,16 @@ var samplePoints = labelImage
 
 var samples_rf1 = mergedCollection.map(function(image) {
   var year = image.get('year');
-  var yearPoints = samplePoints.filter(ee.Filter.eq('ANIO_FL', year));
+  
+  // Lógica de filtrado:
+  // - Clase 1: extrae solo si ANIO_FL coincide con el año de la imagen.
+  // - Clase 0: extrae en todos los años.
+  var filterLogic = ee.Filter.or(
+    ee.Filter.and(ee.Filter.eq('type_01', 1), ee.Filter.eq('ANIO_FL', year)),
+    ee.Filter.eq('type_01', 0)
+  );
+  
+  var yearPoints = samplePoints.filter(filterLogic);
 
   return image.select(BANDS)
     .sampleRegions({
@@ -85,7 +101,6 @@ var samples_rf1 = mergedCollection.map(function(image) {
     })
     .map(function(f) { return f.set('year', year); });
 }).flatten();
-
 // =============================================================================
 // 4. TRAIN RF1
 // =============================================================================
@@ -125,8 +140,8 @@ exportYears.forEach(function(year) {
 
   Export.image.toAsset({
     image      : img,
-    description: 'Export_02_RF1_raw_' + year,
-    assetId    : ASSET_PREFIX + '02_RF1_prediction_connectedFilter_' + year,
+    description: 'Export_02_RF1.2_raw_' + year,
+    assetId    : ASSET_PREFIX + '02_RF1.2_prediction_connectedFilter_' + year,
     region     : roi,
     scale      : 10,
     maxPixels  : 1e13
@@ -137,7 +152,7 @@ exportYears.forEach(function(year) {
       image         : img,
       description   : 'Drive_02_RF1_raw_' + year,
       folder        : DRIVE_FOLDER,
-      fileNamePrefix: '02_RF1_prediction_connectedFilter_' + year,
+      fileNamePrefix: '02_RF1.2_prediction_connectedFilter_' + year,
       region        : roi,
       scale         : 10,
       maxPixels     : 1e13,
