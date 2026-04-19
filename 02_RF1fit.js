@@ -166,3 +166,23 @@ exportYears.forEach(function(year) {
     });
   }
 });
+
+
+// =============================================================================
+// 7. VISUALIZE PREDICTION FOR A GIVEN YEAR
+// =============================================================================
+var visYear = 2017; // Specify the year you want to visualize
+
+// Filter the collection for the specified year
+var predVisImage = ee.Image(preds_collection.filter(ee.Filter.eq('year', visYear)).first());
+
+// Apply selfMask to keep only class 1 (drops class 0 pixels)
+var predClass1Only = predVisImage.select('pred').selfMask();
+
+// Center the map on the Region of Interest and add the layer
+Map.centerObject(roi, 12);
+Map.addLayer(
+  predClass1Only, 
+  {palette: ['orange']}, 
+  'RF1 Prediction (Class 1) - ' + visYear
+);
