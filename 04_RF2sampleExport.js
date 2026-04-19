@@ -364,3 +364,13 @@ exportYears.forEach(function(year) {
     });
   }
 });
+
+
+// =============================================================================
+// 6. EXPORT COMPLEMENTARY BACKGROUND POLYGONS TO ASSET
+// =============================================================================
+Export.table.toAsset({
+  collection: compBackgroundPolys,
+  description: 'Export_compBackgroundPolys',
+  assetId: ASSET_PREFIX + '04_compBackgroundPolys'
+});
