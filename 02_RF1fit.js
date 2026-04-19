@@ -171,7 +171,7 @@ exportYears.forEach(function(year) {
 // =============================================================================
 // 7. VISUALIZE PREDICTION FOR A GIVEN YEAR
 // =============================================================================
-var visYear = 2017; // Specify the year you want to visualize
+var visYear = 2025; // Specify the year you want to visualize
 
 // Filter the collection for the specified year
 var predVisImage = ee.Image(preds_collection.filter(ee.Filter.eq('year', visYear)).first());
@@ -180,7 +180,7 @@ var predVisImage = ee.Image(preds_collection.filter(ee.Filter.eq('year', visYear
 var predClass1Only = predVisImage.select('pred').selfMask();
 
 // Center the map on the Region of Interest and add the layer
-Map.centerObject(roi, 12);
+// Map.centerObject(roi, 12);
 Map.addLayer(
   predClass1Only, 
   {palette: ['orange']}, 
