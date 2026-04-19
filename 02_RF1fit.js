@@ -14,7 +14,7 @@ var exportYears = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 
 var roi             = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
 var gt_polygons_new = ee.FeatureCollection(ASSET_PREFIX + 'gt_polys_6_ctrlReduce_moreCtrls_refineRetamas');
-var compBackgroundPolys = ee.FeatureCollection(ASSET_PREFIX + 'compBackgroundPolys'); // polys complementarios ctrl
+var compBackgroundPolys = ee.FeatureCollection(ASSET_PREFIX + '04_compBackgroundPolys'); // polys complementarios ctrl
 var INCLUDE_COMP_POLYS = true; // Toggle para incluir compBackgroundPolys
 
 var BANDS = ['B2', 'B3', 'B4', 'B8', 'NDYI', 'B2_feb', 'B3_feb', 'B4_feb', 'B8_feb', 'NDYI_feb'];
