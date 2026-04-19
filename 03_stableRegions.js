@@ -236,8 +236,8 @@ Map.onClick(function(coords) {
 // =============================================================================
 Export.image.toAsset({
   image      : stableLayer,
-  description: 'Export_03_StableCategories',
-  assetId    : ASSET_PREFIX + '03_RF2_stable_categories_rf1patchFiltered',
+  description: 'Export_03_StableCategories_conn',
+  assetId    : ASSET_PREFIX + '03_RF2_stable_categories_rf1connectedFilter',
   region     : roi,
   scale      : 10,
   maxPixels  : 1e13
