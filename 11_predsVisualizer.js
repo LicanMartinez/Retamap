@@ -104,6 +104,10 @@ COMPARE_YEARS.forEach(function(year) {
   var rf1_raw = ee.Image(ASSET_PREFIX + '02_RF1_raw_prediction_' + year)
     .select('pred').selfMask().clip(roi);
   Map.addLayer(rf1_raw, visRF1_raw, '[CMP] RF1 raw ' + year, false);
+  
+  var rf1_comp = ee.Image(ASSET_PREFIX + '02_RF1_2compCTRL_prediction_connectedFilter_' + year)
+    .select('pred').selfMask().clip(roi);
+  Map.addLayer(rf1_comp, {min: 1, max: 1, palette: ['red']}, '[CMP] RF1 compCTRL ' + year, false);
 
   // RF2 raw per suffix
   // COMPARE_SUFFIXES.forEach(function(suffix, idx) {
