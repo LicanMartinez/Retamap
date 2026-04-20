@@ -295,6 +295,7 @@ var valPoints   = samplePoints.filter(ee.Filter.lt('rand', VAL_FRACTION));
 // 4.5. MAP VISUALIZATION OF SAMPLE POINTS
 // =============================================================================
 Map.centerObject(roi, 11);
+Map.setOptions('SATELLITE')
 
 // Visualize by the 4 specific categories
 Map.addLayer(samplePoints.filter(ee.Filter.eq('stable_class', 1)), {color: '#FFB300'}, 'Class 1: Stable Retama');
