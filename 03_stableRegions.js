@@ -97,12 +97,32 @@ if (EXPORT_TO_DRIVE) {
 }
 
 // Console chart
-histDict.evaluate(function(d) {
+histDict.evaluate(function(d, error) {
+  // 1. Capturar y mostrar errores del servidor
+  if (error) {
+    print('Error en la computación del histograma:', error);
+    return;
+  }
+  
+  // 2. Validar que el diccionario y la clave existan
+  if (!d || d['sum_ones'] === undefined || d['sum_ones'] === null) {
+    print('El histograma devolvió un resultado nulo. Es posible que el ROI esté enmascarado o vacío.');
+    return;
+  }
+
   var hist = d['sum_ones'];
+  
+  // 3. Validar que el histograma no esté vacío
+  if (Object.keys(hist).length === 0) {
+    print('El histograma se calculó pero está vacío (0 píxeles válidos).');
+    return;
+  }
+
   var rows = Object.keys(hist)
     .map(Number)
     .sort(function(a, b) { return a - b; })
     .map(function(k) { return {sum_ones: k, pixels: hist[String(k)]}; });
+    
   print('Histogram table:', rows);
 
   var chartData = rows.map(function(r) { return [r.sum_ones, r.pixels]; });
