@@ -218,7 +218,7 @@ var RANDOM_SEED  = 42;
 
 // ── Complementary samples ───────────────────────────────────────────────────
 var USE_COMPLEMENTARY      = false;
-var COMPLEMENTARY_POLYGONS = ASSET_PREFIX + 'RF2_complementarySamplingStableRegions_kmsBari';
+var COMPLEMENTARY_POLYGONS = ASSET_PREFIX + '03_RF2_stable_categories_rf1compCtrl';
 
 // =============================================================================
 // 1. LOAD ASSETS
