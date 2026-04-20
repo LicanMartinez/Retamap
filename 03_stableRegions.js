@@ -91,7 +91,7 @@ if (EXPORT_TO_DRIVE) {
     collection    : histFC,
     description   : '03_SumOnes_Histogram_rf1patchFiltered',
     folder        : DRIVE_FOLDER,
-    fileNamePrefix: '03_SumOnes_Histogram_rf1patchFiltered',
+    fileNamePrefix: '03_SumOnes_Histogram_rf1patchFiltered_compCtrl',
     fileFormat    : 'CSV'
   });
 }
