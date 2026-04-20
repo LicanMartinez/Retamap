@@ -1,5 +1,8 @@
 /**** Start of imports. If edited, may not auto-convert in the playground. ****/
-var compBackgroundPolys = /* color: #d63000 */ee.FeatureCollection(
+var compBackgroundPolys = 
+    /* color: #d63000 */
+    /* shown: false */
+    ee.FeatureCollection(
         [ee.Feature(
             ee.Geometry.Polygon(
                 [[[-71.84728261335916, -41.284412429491844],
@@ -218,12 +221,12 @@ var RANDOM_SEED  = 42;
 
 // ── Complementary samples ───────────────────────────────────────────────────
 var USE_COMPLEMENTARY      = false;
-var COMPLEMENTARY_POLYGONS = ASSET_PREFIX + '03_RF2_stable_categories_rf1compCtrl';
+// var COMPLEMENTARY_POLYGONS = ASSET_PREFIX + '03_RF2_stable_categories_rf1compCtrl';
 
 // =============================================================================
 // 1. LOAD ASSETS
 // =============================================================================
-var stableCat = ee.Image(ASSET_PREFIX + '03_RF2_stable_categories').select('stable_class');
+var stableCat = ee.Image(ASSET_PREFIX + '03_RF2_stable_categories_rf1compCtrl').select('stable_class');
 
 var samplingRegion = roi.geometry().bounds();
 
