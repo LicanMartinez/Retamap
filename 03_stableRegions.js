@@ -9,7 +9,7 @@
 // =============================================================================
 var ASSET_PREFIX    = 'projects/ee-licanemartinez/assets/Retamap/';
 var DRIVE_FOLDER    = 'Retamap/Retamap_GEE_Exports';
-var EXPORT_TO_DRIVE = false;  // toggle: true → also export to Google Drive
+var EXPORT_TO_DRIVE = true;  // toggle: true → also export to Google Drive
 
 var exportYears = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 var roi         = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
