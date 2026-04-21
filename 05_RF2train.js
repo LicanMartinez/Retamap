@@ -30,6 +30,8 @@ var samples_rf2 = ee.FeatureCollection(
   })
 ).flatten();
 
+print('Class counts (stable_label):', samples_rf2.aggregate_histogram('stable_label'));
+
 // =============================================================================
 // 2. TRAIN RF2 (train samples only — holdout validation in 09_holdoutValidation.js)
 // =============================================================================
