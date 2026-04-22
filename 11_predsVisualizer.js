@@ -19,7 +19,7 @@
 // 0. CONFIGURATION — edit years here
 // =============================================================================
 var ASSET_PREFIX  = 'projects/ee-licanemartinez/assets/Retamap/';
-var RUN_SUFFIX    = '_s1.10k_qs1.0_s0.20k_qs0.0';
+var RUN_SUFFIX    = '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k';
 var years      = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 // var years         = [2023, 2018];
 var roi           = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
@@ -83,7 +83,7 @@ years.forEach(function(year) {
 var COMPARE_YEARS    = [2017, 2018];
 // var COMPARE_YEARS    = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 var COMPARE_SUFFIXES = [
-  '_s1.10k_qs1.0_s0.20k_qs0.0',
+  '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k',
 ];
 
 // Palettes for each suffix — extend if adding more runs
@@ -110,17 +110,17 @@ COMPARE_YEARS.forEach(function(year) {
   Map.addLayer(rf1_comp, {min: 1, max: 1, palette: ['red']}, '[CMP] RF1 compCTRL ' + year, false);
 
   // RF2 raw per suffix
-  // COMPARE_SUFFIXES.forEach(function(suffix, idx) {
-  //   var palette = COMPARE_PALETTES[idx % COMPARE_PALETTES.length];
-  //   var rf2raw = ee.Image(ASSET_PREFIX + '06_RF2_raw_prediction_' + year + suffix)
-  //     .select('classification').selfMask().clip(roi);
-  //   Map.addLayer(
-  //     rf2raw,
-  //     {min: 1, max: 1, palette: [palette]},
-  //     '[CMP] RF2 raw ' + year + ' ' + suffix,
-  //     false
-  //   );
-  // });
+  COMPARE_SUFFIXES.forEach(function(suffix, idx) {
+    var palette = COMPARE_PALETTES[idx % COMPARE_PALETTES.length];
+    var rf2raw = ee.Image(ASSET_PREFIX + '06_RF2_raw_prediction_' + year + suffix)
+      .select('classification').selfMask().clip(roi);
+    Map.addLayer(
+      rf2raw,
+      {min: 1, max: 1, palette: [palette]},
+      '[CMP] RF2 raw ' + year + ' ' + suffix,
+      false
+    );
+  });
 });
 
 // =============================================================================
