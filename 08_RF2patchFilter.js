@@ -23,7 +23,7 @@ var exportYears   = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 var roi           = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
 var MIN_PATCH_PIX = 5;   // minimum connected-pixel count for class-1 patches
 var MAX_NEIGHBORS = 50;  // neighbourhood radius for connectedPixelCount
-var RUN_SUFFIX    = '_s1.10k_qs1.0_s0.20k_qs0.0';
+var RUN_SUFFIX    = '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k';
 
 // =============================================================================
 // 1. LOAD GAP-FILLED PREDICTIONS (07_RF2_gapFill_YYYY)
