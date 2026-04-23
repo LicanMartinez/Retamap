@@ -25,7 +25,7 @@ var EXPORT_TO_DRIVE = false;  // toggle: true → export matched-point tables to
 
 var exportYears = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 var VAL_YEARS   = exportYears;   // edit to evaluate a subset only
-var RUN_SUFFIX  = '_s1.10k_qs1.0_s0.20k_qs0.0';
+var RUN_SUFFIX  = '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k';
 
 // =============================================================================
 // 1. HELPER: metrics feature from confusion matrix
