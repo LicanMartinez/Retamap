@@ -71,7 +71,7 @@ Map.centerObject(roi, 9);
 
 // Show 2023 proportions as a choropleth
 var vis2023 = gridResult.map(function(cell) {
-  return cell.set('vis_proportion', cell.get('proportion_2023'));
+  return cell.set('vis_prop', cell.get('prop_2023'));
 });
 Map.addLayer(
   vis2023,
