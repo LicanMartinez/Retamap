@@ -16,8 +16,8 @@
 // 0. CONFIGURATION
 // =============================================================================
 var ASSET_PREFIX    = 'projects/ee-licanemartinez/assets/Retamap/';
-var DRIVE_FOLDER    = 'Retamap/Retamap_GEE_Exports';
-var EXPORT_TO_DRIVE = false;  // toggle: true → also export to Google Drive
+var DRIVE_FOLDER    = 'Retamap_GEE_Exports';
+var EXPORT_TO_DRIVE = true;  // toggle: true → also export to Google Drive
 
 var exportYears   = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 var roi           = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
@@ -92,14 +92,14 @@ exportYears.forEach(function(year) {
     filteredCollection.filter(ee.Filter.eq('year', year)).first()
   ).select('classification').clip(roi).uint8();
 
-  Export.image.toAsset({
-    image      : img,
-    description: 'Export_08_RF2_' + year + RUN_SUFFIX,
-    assetId    : ASSET_PREFIX + '08_RF2_prediction_' + year + RUN_SUFFIX,
-    region     : roi,
-    scale      : 10,
-    maxPixels  : 1e13
-  });
+  // Export.image.toAsset({
+  //   image      : img,
+  //   description: 'Export_08_RF2_' + year + RUN_SUFFIX,
+  //   assetId    : ASSET_PREFIX + '08_RF2_prediction_' + year + RUN_SUFFIX,
+  //   region     : roi,
+  //   scale      : 10,
+  //   maxPixels  : 1e13
+  // });
 
   if (EXPORT_TO_DRIVE) {
     Export.image.toDrive({
