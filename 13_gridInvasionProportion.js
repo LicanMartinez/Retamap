@@ -45,8 +45,8 @@ exportYears.forEach(function(year) {
   // sum = count of class-1 pixels (retama); count = total non-masked pixels
   gridResult = pred.reduceRegions({
     collection: gridResult,
-    reducer   : ee.Reducer.sum().setOutputs(['retama_' + year])
-                  .combine(ee.Reducer.count().setOutputs(['total_' + year]), '', true),
+    reducer   : ee.Reducer.sum().setOutputs(['ret_' + year])
+                  .combine(ee.Reducer.count().setOutputs(['tot_' + year]), '', true),
     scale     : 10,
     tileScale : 4
   });
