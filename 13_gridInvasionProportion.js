@@ -20,11 +20,11 @@
 // 0. CONFIGURATION
 // =============================================================================
 var ASSET_PREFIX    = 'projects/ee-licanemartinez/assets/Retamap/';
-var DRIVE_FOLDER    = 'Retamap/Retamap_GEE_Exports';
+var DRIVE_FOLDER    = 'Retamap_GEE_Exports';
 var EXPORT_TO_DRIVE = true;  // toggle: true → also export shapefile to Drive
 
 var exportYears = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
-var CELL_SIZE   = 3000;   // metres — must match the grid exported by 12_gridExport.js
+var CELL_SIZE   = 1000;   // metres — must match the grid exported by 12_gridExport.js
 var RUN_SUFFIX  = '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k';
 
 // =============================================================================
