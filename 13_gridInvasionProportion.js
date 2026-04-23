@@ -57,9 +57,9 @@ exportYears.forEach(function(year) {
 // =============================================================================
 exportYears.forEach(function(year) {
   gridResult = gridResult.map(function(cell) {
-    var ret = ee.Number(cell.get('retama_' + year));
-    var tot = ee.Number(cell.get('total_' + year));
-    return cell.set('proportion_' + year, ret.divide(tot));
+    var ret = ee.Number(cell.get('ret_' + year));
+    var tot = ee.Number(cell.get('tot_' + year));
+    return cell.set('prop_' + year, ret.divide(tot));
   });
 });
 
