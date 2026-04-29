@@ -31,6 +31,7 @@ var SHOW_RF2_FINAL   = true;   // toggle after 08_RF2patchFilter.js
 
 // Visualization params — only class-1 shown (selfMask removes class-0)
 var visRF1     = {min: 1, max: 1, palette: ['#FFD700']};  // yellow
+var visRF1_compCtrl     = {min: 1, max: 1, palette: ['green']};  // yellow
 var visRF1_raw     = {min: 1, max: 1, palette: ['violet']};  // violet
 var visRF2raw  = {min: 1, max: 1, palette: ['#FF8C00']};  // orange
 var visRF2gf   = {min: 1, max: 1, palette: ['#00BCD4']};  // teal
@@ -48,6 +49,9 @@ years.forEach(function(year) {
   // RF1 band is 'pred' (from 02_RF1fit.js)
   var rf1 = ee.Image(ASSET_PREFIX + '02_RF1_raw_prediction_' + year)
     .select('pred').selfMask().clip(roi);
+    
+  var rf1_compCtrl = ee.Image(ASSET_PREFIX + '02_RF1_2compCTRL_prediction_connectedFilter_' + year)
+    .select('pred').selfMask().clip(roi);
 
   // RF2 raw band is 'classification' (from 06_RF2predict.js)
   var rf2raw = ee.Image(ASSET_PREFIX + '06_RF2_raw_prediction_' + year + RUN_SUFFIX)
@@ -62,6 +66,7 @@ years.forEach(function(year) {
     .select('classification').selfMask().clip(roi);
 
   Map.addLayer(rf1,    visRF1,    'RF1 '         + year, false);
+  Map.addLayer(rf1_compCtrl,    visRF1_compCtrl,    'RF1_compCtrl '         + year, false);
   Map.addLayer(rf2raw, visRF2raw, 'RF2 raw '     + year, false);
   if (SHOW_RF2_GAPFILL) {
     Map.addLayer(rf2gf, visRF2gf, 'RF2 gap-fill ' + year, false);
