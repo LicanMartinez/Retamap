@@ -40,16 +40,26 @@ var visRF2fin  = {min: 1, max: 1, palette: ['#CC0000']};  // red
 // =============================================================================
 // 2. ADD LAYERS
 // -----------------------------------------------------------------------------
-// Order per year: RF1 (bottom) → RF2 raw → RF2 gap-fill → RF2 final (top).
+// Order per year (bottom → top): mosaic true color → NDYI → RF1 → RF2 raw
+//                                 → RF2 gap-fill → RF2 final.
 // All layers off by default.
 // =============================================================================
 // Map.centerObject(roi, 10);
 
+// Mosaic visualization params (01_MergedBands_YYYY bands)
+var visTrueColor = {bands: ['B4', 'B3', 'B2'], min: 0, max: 2500};
+var visNDYI      = {min: -0.1, max: 0.4, palette: ['#313695','#abd9e9','#ffffbf','#fdae61','#f46d43','#d73027']};
+
 years.forEach(function(year) {
+  var mosaic = ee.Image(ASSET_PREFIX + '01_MergedBands_' + year).clip(roi);
+
+  Map.addLayer(mosaic, visTrueColor, 'True color ' + year, false);
+  Map.addLayer(mosaic.select('NDYI'), visNDYI, 'NDYI ' + year, false);
+
   // RF1 band is 'pred' (from 02_RF1fit.js)
   var rf1 = ee.Image(ASSET_PREFIX + '02_RF1_raw_prediction_' + year)
     .select('pred').selfMask().clip(roi);
-    
+
   var rf1_compCtrl = ee.Image(ASSET_PREFIX + '02_RF1_2compCTRL_prediction_connectedFilter_' + year)
     .select('pred').selfMask().clip(roi);
 
