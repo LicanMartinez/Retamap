@@ -25,7 +25,7 @@ var DRIVE_FOLDER    = 'Retamap/Retamap_GEE_Exports';
 var EXPORT_TO_DRIVE = false;  // toggle: true → also export to Google Drive
 
 var VAL_YEAR   = 2023;
-var RUN_SUFFIX = '_s1.10k_qs1.0_s0.20k_qs0.0';
+var RUN_SUFFIX = '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k';
 
 // Section C — cross-run comparison (edit to include the runs you want to compare)
 var COMPARE_SUFFIXES = [
