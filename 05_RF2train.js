@@ -16,7 +16,7 @@
 var ASSET_PREFIX = 'projects/ee-licanemartinez/assets/Retamap/';
 var exportYears  = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 var BANDS        = ['B2', 'B3', 'B4', 'B8', 'NDYI', 'B2_feb', 'B3_feb', 'B4_feb', 'B8_feb', 'NDYI_feb'];
-var RUN_SUFFIX   = '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k';
+var RUN_SUFFIX   = '_trimmedRF1comp_s1n12k_qs1n12k_s0n12k_qs0n12k';
 
 // =============================================================================
 // 1. LOAD AND MERGE PER-YEAR TRAIN SAMPLE ASSETS

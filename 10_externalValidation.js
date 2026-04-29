@@ -25,11 +25,11 @@ var DRIVE_FOLDER    = 'Retamap/Retamap_GEE_Exports';
 var EXPORT_TO_DRIVE = false;  // toggle: true → also export to Google Drive
 
 var VAL_YEAR   = 2023;
-var RUN_SUFFIX = '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k';
+var RUN_SUFFIX = '_trimmedRF1comp_s1n12k_qs1n12k_s0n12k_qs0n12k';
 
 // Section C — cross-run comparison (edit to include the runs you want to compare)
 var COMPARE_SUFFIXES = [
-  '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k',
+  '_trimmedRF1comp_s1n12k_qs1n12k_s0n12k_qs0n12k',
 ];
 
 // =============================================================================

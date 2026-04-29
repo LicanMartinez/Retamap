@@ -19,7 +19,7 @@
 // 0. CONFIGURATION — edit years here
 // =============================================================================
 var ASSET_PREFIX  = 'projects/ee-licanemartinez/assets/Retamap/';
-var RUN_SUFFIX    = '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k';
+var RUN_SUFFIX    = '_trimmedRF1comp_s1n12k_qs1n12k_s0n12k_qs0n12k';
 var years      = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 // var years         = [2023, 2018];
 var roi           = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
@@ -83,7 +83,7 @@ years.forEach(function(year) {
 // var COMPARE_YEARS    = [2017, 2018];
 var COMPARE_YEARS    = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 var COMPARE_SUFFIXES = [
-  '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k',
+  '_trimmedRF1comp_s1n12k_qs1n12k_s0n12k_qs0n12k',
 ];
 
 // Palettes for each suffix — extend if adding more runs

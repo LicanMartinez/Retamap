@@ -25,7 +25,7 @@ var EXPORT_TO_DRIVE = true;  // toggle: true → also export shapefile to Drive
 
 var exportYears = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 var CELL_SIZE   = 1000;   // metres — must match the grid exported by 12_gridExport.js
-var RUN_SUFFIX  = '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k';
+var RUN_SUFFIX  = '_trimmedRF1comp_s1n12k_qs1n12k_s0n12k_qs0n12k';
 
 // =============================================================================
 // 1. LOAD GRID
