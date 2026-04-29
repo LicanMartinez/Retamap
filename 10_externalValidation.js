@@ -25,11 +25,11 @@ var DRIVE_FOLDER    = 'Retamap/Retamap_GEE_Exports';
 var EXPORT_TO_DRIVE = false;  // toggle: true → also export to Google Drive
 
 var VAL_YEAR   = 2023;
-var RUN_SUFFIX = '_s1.10k_qs1.0_s0.20k_qs0.0';
+var RUN_SUFFIX = '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k';
 
 // Section C — cross-run comparison (edit to include the runs you want to compare)
 var COMPARE_SUFFIXES = [
-  '_s1.10k_qs1.0_s0.20k_qs0.0',
+  '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k',
 ];
 
 // =============================================================================
@@ -125,7 +125,13 @@ var cm_rf2_gf_ext = rf2_gf_sampled.errorMatrix({
 });
 
 // --- B4. RF2 final (after patch filter) ---
-var rf2_sampled = rf2_pred.sampleRegions({
+// Pixels removed by patch filter (small class-1 patches) are nodata in 08 but
+// semantically class-0 predictions. Unmask with 0 within the gap-fill valid area
+// so those points are counted as class-0 rather than dropped. Water / elevation /
+// cloud pixels (masked in ALL stages) stay excluded via the base mask from 07.
+var base_mask = rf2_gf_pred.mask();
+var rf2_pred_unmasked = rf2_pred.unmask(0).updateMask(base_mask);
+var rf2_sampled = rf2_pred_unmasked.sampleRegions({
   collection: valPoints,
   properties: ['label'],
   scale     : 10,
@@ -230,7 +236,8 @@ COMPARE_SUFFIXES.forEach(function(suffix) {
   // --- C-B4. RF2 final ---
   var cmp_fin = ee.Image(ASSET_PREFIX + '08_RF2_prediction_' + VAL_YEAR + suffix)
     .select('classification');
-  var cmp_fin_sampled = cmp_fin.sampleRegions({
+  var cmp_gf_mask = cmp_gf.mask();
+  var cmp_fin_sampled = cmp_fin.unmask(0).updateMask(cmp_gf_mask).sampleRegions({
     collection: valPoints, properties: ['label'], scale: 10, tileScale: 4
   });
   print('C-B4 [' + suffix + '] RF2 final — matched:', cmp_fin_sampled.size());
