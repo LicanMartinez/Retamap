@@ -1,3 +1,6 @@
+/**** Start of imports. If edited, may not auto-convert in the playground. ****/
+var trueColorVisParam = {"opacity":1,"bands":["B4","B3","B2"],"min":365.91480931730996,"max":1564.904287792141,"gamma":0.702};
+/***** End of imports. If edited, may not auto-convert in the playground. *****/
 // =============================================================================
 // 11: Predictions Visualizer — RF1 / RF2 raw / RF2 gap-fill / RF2 final, all years
 // -----------------------------------------------------------------------------
@@ -47,7 +50,8 @@ var visRF2fin  = {min: 1, max: 1, palette: ['#CC0000']};  // red
 // Map.centerObject(roi, 10);
 
 // Mosaic visualization params (01_MergedBands_YYYY bands)
-var visTrueColor = {bands: ['B4', 'B3', 'B2'], min: 0, max: 2500};
+// var visTrueColor = {bands: ['B4', 'B3', 'B2'], min: 0, max: 2500};
+var visTrueColor = trueColorVisParam
 var visNDYI      = {min: -0.1, max: 0.4, palette: ['#313695','#abd9e9','#ffffbf','#fdae61','#f46d43','#d73027']};
 
 years.forEach(function(year) {
