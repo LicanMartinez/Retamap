@@ -22,13 +22,13 @@
 // 0. CONFIGURATION
 // =============================================================================
 var ASSET_PREFIX    = 'projects/ee-licanemartinez/assets/Retamap/';
-var DRIVE_FOLDER    = 'Retamap/Retamap_GEE_Exports';
-var EXPORT_TO_DRIVE = false;
+var DRIVE_FOLDER    = 'Retamap';
+var EXPORT_TO_DRIVE = true;
 
 var exportYears = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 var VAL_YEARS   = exportYears;
-var RUN_SUFFIX  = '_trimmedRF1comp_s1n12k_qs1n12k_s0n12k_qs0n12k';
-// var RUN_SUFFIX  = '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k';
+// var RUN_SUFFIX  = '_trimmedRF1comp_s1n12k_qs1n12k_s0n12k_qs0n12k';
+var RUN_SUFFIX  = '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k';
 
 // =============================================================================
 // 1. HELPER: full RS metrics from confusion matrix
@@ -145,3 +145,22 @@ print(
     .setChartType('Table')
     .setOptions({title: '09.2 — Holdout validation (' + RUN_SUFFIX + ')'})
 );
+
+
+
+// 4 export to drive:
+// Exportar la tabla resumen a Drive en lugar de imprimirla en consola
+var metricsCollection = ee.FeatureCollection(allFeatures);
+
+if (EXPORT_TO_DRIVE) {
+  Export.table.toDrive({
+    collection: metricsCollection,
+    description: 'Holdout_Summary_Metrics' + RUN_SUFFIX,
+    folder: DRIVE_FOLDER,
+    fileNamePrefix: 'Holdout_Summary_Metrics' + RUN_SUFFIX,
+    fileFormat: 'CSV'
+  });
+}
+
+
+
