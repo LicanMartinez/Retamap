@@ -1,3 +1,6 @@
+/**** Start of imports. If edited, may not auto-convert in the playground. ****/
+var trueColorVisParam = {"opacity":1,"bands":["B4","B3","B2"],"min":365.91480931730996,"max":1564.904287792141,"gamma":0.702};
+/***** End of imports. If edited, may not auto-convert in the playground. *****/
 // =============================================================================
 // 11: Predictions Visualizer — RF1 / RF2 raw / RF2 gap-fill / RF2 final, all years
 // -----------------------------------------------------------------------------
@@ -47,7 +50,8 @@ var visRF2fin  = {min: 1, max: 1, palette: ['#CC0000']};  // red
 // Map.centerObject(roi, 10);
 
 // Mosaic visualization params (01_MergedBands_YYYY bands)
-var visTrueColor = {bands: ['B4', 'B3', 'B2'], min: 0, max: 2500};
+// var visTrueColor = {bands: ['B4', 'B3', 'B2'], min: 0, max: 2500};
+var visTrueColor = trueColorVisParam
 var visNDYI      = {min: -0.1, max: 0.4, palette: ['#313695','#abd9e9','#ffffbf','#fdae61','#f46d43','#d73027']};
 
 years.forEach(function(year) {
@@ -100,6 +104,7 @@ years.forEach(function(year) {
 var COMPARE_YEARS    = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 var COMPARE_SUFFIXES = [
   '_trimmedRF1comp_s1n12k_qs1n12k_s0n12k_qs0n12k',
+  '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k'
 ];
 
 // Palettes for each suffix — extend if adding more runs
@@ -111,33 +116,33 @@ var COMPARE_PALETTES = [
   '#FF4500',   // orange-red (run 5)
 ];
 
-// COMPARE_YEARS.forEach(function(year) {
-//   // RF1 — shown once per year regardless of suffix list
-//   // var rf1 = ee.Image(ASSET_PREFIX + '02_RF1_prediction_connectedFilter_' + year)
-//   //   .select('pred').selfMask().clip(roi);
-//   // Map.addLayer(rf1, visRF1, '[CMP] RF1 conn' + year, false);
+COMPARE_YEARS.forEach(function(year) {
+  // RF1 — shown once per year regardless of suffix list
+  // var rf1 = ee.Image(ASSET_PREFIX + '02_RF1_prediction_connectedFilter_' + year)
+  //   .select('pred').selfMask().clip(roi);
+  // Map.addLayer(rf1, visRF1, '[CMP] RF1 conn' + year, false);
   
-//   // var rf1_raw = ee.Image(ASSET_PREFIX + '02_RF1_raw_prediction_' + year)
-//   //   .select('pred').selfMask().clip(roi);
-//   // Map.addLayer(rf1_raw, visRF1_raw, '[CMP] RF1 raw ' + year, false);
+  // var rf1_raw = ee.Image(ASSET_PREFIX + '02_RF1_raw_prediction_' + year)
+  //   .select('pred').selfMask().clip(roi);
+  // Map.addLayer(rf1_raw, visRF1_raw, '[CMP] RF1 raw ' + year, false);
   
-//   var rf1_comp = ee.Image(ASSET_PREFIX + '02_RF1_2compCTRL_prediction_connectedFilter_' + year)
-//     .select('pred').selfMask().clip(roi);
-//   Map.addLayer(rf1_comp, {min: 1, max: 1, palette: ['red']}, '[CMP] RF1 compCTRL ' + year, false);
+  // var rf1_comp = ee.Image(ASSET_PREFIX + '02_RF1_2compCTRL_prediction_connectedFilter_' + year)
+  //   .select('pred').selfMask().clip(roi);
+  // Map.addLayer(rf1_comp, {min: 1, max: 1, palette: ['red']}, '[CMP] RF1 compCTRL ' + year, false);
 
-//   // RF2 raw per suffix
-//   COMPARE_SUFFIXES.forEach(function(suffix, idx) {
-//     var palette = COMPARE_PALETTES[idx % COMPARE_PALETTES.length];
-//     var rf2raw = ee.Image(ASSET_PREFIX + '06_RF2_raw_prediction_' + year + suffix)
-//       .select('classification').selfMask().clip(roi);
-//     Map.addLayer(
-//       rf2raw,
-//       {min: 1, max: 1, palette: [palette]},
-//       '[CMP] RF2 raw ' + year + ' ' + suffix,
-//       false
-//     );
-//   });
-// });
+  // RF2 raw per suffix
+  COMPARE_SUFFIXES.forEach(function(suffix, idx) {
+    var palette = COMPARE_PALETTES[idx % COMPARE_PALETTES.length];
+    var rf2raw = ee.Image(ASSET_PREFIX + '06_RF2_raw_prediction_' + year + suffix)
+      .select('classification').selfMask().clip(roi);
+    Map.addLayer(
+      rf2raw,
+      {min: 1, max: 1, palette: [palette]},
+      '[CMP] RF2 raw ' + year + ' ' + suffix,
+      false
+    );
+  });
+});
 
 // =============================================================================
 

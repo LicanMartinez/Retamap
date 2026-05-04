@@ -84,7 +84,15 @@ var samplePoints = labelImage
     geometries : true,
     tileScale  : 16
   });
+  
 
+print('Puntos reales obtenidos - Clase 0 (Ctrl):', 
+      samplePoints.filter(ee.Filter.eq('type_01', 0)).size());
+      
+print('Puntos reales obtenidos - Clase 1 (Retama):', 
+      samplePoints.filter(ee.Filter.eq('type_01', 1)).size());
+      
+      
 var samples_rf1 = mergedCollection.map(function(image) {
   var year = image.get('year');
   
