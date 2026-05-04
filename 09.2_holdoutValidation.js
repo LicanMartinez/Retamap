@@ -27,8 +27,8 @@ var EXPORT_TO_DRIVE = false;
 
 var exportYears = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 var VAL_YEARS   = exportYears;
-// var RUN_SUFFIX  = '_trimmedRF1comp_s1n12k_qs1n12k_s0n12k_qs0n12k';
-var RUN_SUFFIX  = '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k';
+var RUN_SUFFIX  = '_trimmedRF1comp_s1n12k_qs1n12k_s0n12k_qs0n12k';
+// var RUN_SUFFIX  = '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k';
 
 // =============================================================================
 // 1. HELPER: full RS metrics from confusion matrix
