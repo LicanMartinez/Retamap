@@ -104,6 +104,7 @@ years.forEach(function(year) {
 var COMPARE_YEARS    = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
 var COMPARE_SUFFIXES = [
   '_trimmedRF1comp_s1n12k_qs1n12k_s0n12k_qs0n12k',
+  '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k'
 ];
 
 // Palettes for each suffix — extend if adding more runs
@@ -115,33 +116,33 @@ var COMPARE_PALETTES = [
   '#FF4500',   // orange-red (run 5)
 ];
 
-// COMPARE_YEARS.forEach(function(year) {
-//   // RF1 — shown once per year regardless of suffix list
-//   // var rf1 = ee.Image(ASSET_PREFIX + '02_RF1_prediction_connectedFilter_' + year)
-//   //   .select('pred').selfMask().clip(roi);
-//   // Map.addLayer(rf1, visRF1, '[CMP] RF1 conn' + year, false);
+COMPARE_YEARS.forEach(function(year) {
+  // RF1 — shown once per year regardless of suffix list
+  // var rf1 = ee.Image(ASSET_PREFIX + '02_RF1_prediction_connectedFilter_' + year)
+  //   .select('pred').selfMask().clip(roi);
+  // Map.addLayer(rf1, visRF1, '[CMP] RF1 conn' + year, false);
   
-//   // var rf1_raw = ee.Image(ASSET_PREFIX + '02_RF1_raw_prediction_' + year)
-//   //   .select('pred').selfMask().clip(roi);
-//   // Map.addLayer(rf1_raw, visRF1_raw, '[CMP] RF1 raw ' + year, false);
+  // var rf1_raw = ee.Image(ASSET_PREFIX + '02_RF1_raw_prediction_' + year)
+  //   .select('pred').selfMask().clip(roi);
+  // Map.addLayer(rf1_raw, visRF1_raw, '[CMP] RF1 raw ' + year, false);
   
-//   var rf1_comp = ee.Image(ASSET_PREFIX + '02_RF1_2compCTRL_prediction_connectedFilter_' + year)
-//     .select('pred').selfMask().clip(roi);
-//   Map.addLayer(rf1_comp, {min: 1, max: 1, palette: ['red']}, '[CMP] RF1 compCTRL ' + year, false);
+  // var rf1_comp = ee.Image(ASSET_PREFIX + '02_RF1_2compCTRL_prediction_connectedFilter_' + year)
+  //   .select('pred').selfMask().clip(roi);
+  // Map.addLayer(rf1_comp, {min: 1, max: 1, palette: ['red']}, '[CMP] RF1 compCTRL ' + year, false);
 
-//   // RF2 raw per suffix
-//   COMPARE_SUFFIXES.forEach(function(suffix, idx) {
-//     var palette = COMPARE_PALETTES[idx % COMPARE_PALETTES.length];
-//     var rf2raw = ee.Image(ASSET_PREFIX + '06_RF2_raw_prediction_' + year + suffix)
-//       .select('classification').selfMask().clip(roi);
-//     Map.addLayer(
-//       rf2raw,
-//       {min: 1, max: 1, palette: [palette]},
-//       '[CMP] RF2 raw ' + year + ' ' + suffix,
-//       false
-//     );
-//   });
-// });
+  // RF2 raw per suffix
+  COMPARE_SUFFIXES.forEach(function(suffix, idx) {
+    var palette = COMPARE_PALETTES[idx % COMPARE_PALETTES.length];
+    var rf2raw = ee.Image(ASSET_PREFIX + '06_RF2_raw_prediction_' + year + suffix)
+      .select('classification').selfMask().clip(roi);
+    Map.addLayer(
+      rf2raw,
+      {min: 1, max: 1, palette: [palette]},
+      '[CMP] RF2 raw ' + year + ' ' + suffix,
+      false
+    );
+  });
+});
 
 // =============================================================================
 
