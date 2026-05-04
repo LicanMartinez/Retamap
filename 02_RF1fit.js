@@ -84,6 +84,8 @@ var samplePoints = labelImage
     geometries : true,
     tileScale  : 16
   });
+  
+print(samplePoints, 'samplePoints');
 
 var samples_rf1 = mergedCollection.map(function(image) {
   var year = image.get('year');
