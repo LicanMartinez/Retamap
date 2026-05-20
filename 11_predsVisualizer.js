@@ -145,6 +145,29 @@ COMPARE_YEARS.forEach(function(year) {
 });
 
 // =============================================================================
+// 4. BASELINE vs PER-YEAR RF2 COMPARISON
+// -----------------------------------------------------------------------------
+// Compares the single-model RF2 raw predictions (06_) against year-specific
+// RF2 models (05b_). Toggle SHOW_PERYEAR_CMP after running 05b_RF2trainPerYear.js.
+// =============================================================================
+var SHOW_PERYEAR_CMP = true;
+
+if (SHOW_PERYEAR_CMP) {
+  var visBaseline = {min: 1, max: 1, palette: ['#FF8C00']};  // orange
+  var visPerYear  = {min: 1, max: 1, palette: ['#9400D3']};  // dark violet
+
+  years.forEach(function(year) {
+    var baseline = ee.Image(ASSET_PREFIX + '06_RF2_raw_prediction_' + year + RUN_SUFFIX)
+      .select('classification').selfMask().clip(roi);
+    var perYear = ee.Image(ASSET_PREFIX + '05b_RF2_perYear_raw_' + year + RUN_SUFFIX)
+      .select('classification').selfMask().clip(roi);
+
+    Map.addLayer(baseline, visBaseline, '[PY] Baseline RF2 raw ' + year, false);
+    Map.addLayer(perYear,  visPerYear,  '[PY] PerYear RF2 raw '  + year, false);
+  });
+}
+
+// =============================================================================
 
 // Print validation points
 var valPoints = ee.FeatureCollection(ASSET_PREFIX + '4-Validation_points_complete_2023');
