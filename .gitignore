@@ -5,3 +5,9 @@ Thumbs.db
 # Editors
 *.swp
 .vscode/
+
+# R
+.Rhistory
+
+# Experimental / non-canonical variants (kept locally, not published)
+experimental/

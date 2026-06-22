@@ -1,0 +1,15 @@
+Métrica	Definición e Interpretación
+N	Cantidad total de puntos de validación evaluados. Indica el tamaño muestral sobre el cual se calculan todas las demás métricas.
+OA (Overall Accuracy)	Proporción de predicciones correctas (tanto positivas como negativas) sobre el total de muestras. Mide la exactitud general del modelo, donde valores cercanos a 1 indican un mejor rendimiento global.
+Kappa	Medida de concordancia estadística que ajusta la exactitud global descontando los aciertos esperados por azar. Valores cercanos a 1 indican una clasificación robusta, mientras que valores cercanos a 0 indican que el modelo no clasifica mejor que el azar.
+PA_retama (Producer's Accuracy)	Proporción de píxeles reales de "retama" que el modelo detectó correctamente (equivalente al Recall o Sensibilidad). Evalúa la capacidad del modelo para encontrar la clase objetivo en el terreno; valores altos indican pocos falsos negativos.
+UA_retama (User's Accuracy)	Proporción de píxeles clasificados como "retama" que realmente pertenecen a esa clase en el terreno (equivalente a la Precisión). Indica la confiabilidad del mapa generado; valores altos significan que si el mapa indica "retama", es muy probable que lo sea.
+OE_retama (Omission Error)	Proporción de píxeles reales de "retama" que el modelo no detectó y asignó a la clase control (calculado como 1 - PA). Cuantifica la subestimación de la clase objetivo.
+CE_retama (Commission Error)	Proporción de píxeles clasificados como "retama" que en realidad pertenecen a la clase control (calculado como 1 - UA). Cuantifica la sobreestimación de la clase objetivo.
+PA_ctrl	Proporción de píxeles reales de la clase control (no-retama) que el modelo identificó correctamente. Evalúa la capacidad del modelo para aislar el fondo sin clasificarlo erróneamente como la clase de interés.
+UA_ctrl	Proporción de píxeles clasificados como control que efectivamente corresponden a dicha clase en la realidad. Refleja la confiabilidad del mapa en las áreas catalogadas como libres de "retama".
+F1	Media armónica entre UA_retama (Precisión) y PA_retama (Recall). Proporciona un balance único del rendimiento sobre la clase objetivo, siendo especialmente útil para evaluar el modelo cuando las clases están desbalanceadas en el terreno.
+TP (True Positives)	Cantidad absoluta de muestras de "retama" que el modelo clasificó correctamente como "retama".
+FP (False Positives)	Cantidad absoluta de muestras de la clase control que el modelo clasificó incorrectamente como "retama" (comisión).
+FN (False Negatives)	Cantidad absoluta de muestras de "retama" que el modelo clasificó incorrectamente como clase control (omisión).
+TN (True Negatives)	Cantidad absoluta de muestras de la clase control que el modelo clasificó correctamente.
