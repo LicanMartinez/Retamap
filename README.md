@@ -17,7 +17,7 @@ samples** derived from the multi-year RF1 series.
 
 ## Citation
 
-> Sofi *et al.* (in preparation). *[Paper title]*. *[Journal]*. DOI: `[to be added]`
+
 
 If you use this code, please cite the paper above.
 
@@ -104,6 +104,7 @@ Final-map (stage C) performance, mean ± SD across 2017–2025:
 │   ├── validation_plots_byStage.png
 │   ├── validation_plots_byYear.png
 │   └── metricas.txt                          # metric definitions
+├── r_analysis/                               # downstream R analysis (occupation, drivers, management)
 └── README.md
 ```
 
