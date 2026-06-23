@@ -73,6 +73,10 @@ var finalMap = function(year) {
 var map2017 = finalMap(2017);
 var map2025 = finalMap(2025);
 
+// Anchor for all stratum-building ops below — avoids the ee.Image.constant()
+// "default projection" pitfall (see Section 4 note).
+var nativeProj = map2017.projection();
+
 // =============================================================================
 // 2. S1 CONDITION — retama in 2017 and/or 2025
 // =============================================================================
@@ -101,10 +105,20 @@ var nearCells = isRetama.reduceRegions({
 print('1km grid cells flagged as near-retama:', nearCells.size(), '/', grid1km.size());
 
 // Rasterize flagged cells back to a mask (1 inside, 0 outside) for the stratum logic.
-// NOTE: .byte() must be called BEFORE .paint() (the standard EE "rasterize a
+// NOTE 1: .byte() must be called BEFORE .paint() (the standard EE "rasterize a
 // FeatureCollection" idiom) — calling it after paint()/unmask() left isNear
-// effectively empty (stratum areas for s2/s3 came back as exactly 0).
-var isNear = ee.Image().byte().paint(nearCells, 1).unmask(0).rename('near');
+// effectively empty.
+// NOTE 2: .paint() outputs a "default projection" image (a coarse, unbounded
+// global grid), NOT the native Sentinel-2 grid. Combining a default-projection
+// image with a native-projection one (isNonRetama, in Section 4) lets EE's
+// projection-inheritance rule silently snap the WHOLE combination onto the
+// wrong grid. Forcing .reproject(nativeProj) here pins isNear onto the same
+// grid as everything else before it gets combined — this is what actually
+// fixed s2/s3 area coming back as 0 (the earlier .byte()-ordering fix alone
+// was necessary but not sufficient).
+var isNear = ee.Image().byte().paint(nearCells, 1).unmask(0)
+  .reproject(nativeProj)
+  .rename('near');
 
 // Diagnostic: area flagged "near" should be large (hundreds of km^2, matching
 // the 842/25498 grid cells) — confirms the rasterization actually worked
@@ -123,10 +137,15 @@ print('isNear area (m^2, sanity check — should be large, not 0):',
 // =============================================================================
 var isNonRetama = isRetama.not();
 
-// Build from an explicit constant default (3 = far) and overwrite progressively;
-// isRetama is applied LAST so it always wins over the near-flag (a retama pixel
-// sits, by construction, inside its own "near" cell).
-var stratum = ee.Image.constant(3).byte()
+// Build from isRetama (native S2 grid) rather than a bare ee.Image.constant().
+// A bare constant has no real projection, and since .where()'s output inherits
+// "self"'s projection at each step, chaining .where() off a constant let the
+// whole computation drift onto a coarse default grid — collapsing s2/s3 area
+// to 0 even though the inputs (isNear, isRetama) were each individually
+// correct. Deriving the base from isRetama keeps everything anchored to
+// nativeProj throughout. isRetama is applied LAST so it always wins over the
+// near-flag (a retama pixel sits, by construction, inside its own "near" cell).
+var stratum = isRetama.multiply(0).add(3).toByte()
   .where(isNonRetama.and(isNear), 2)
   .where(isRetama, 1)
   .updateMask(dataMask)
