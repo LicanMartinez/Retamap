@@ -36,7 +36,7 @@ WORK_DIR    <- file.path(PROJECT_DIR, "gee_scripts", "validation_independent")
 # Place the Drive-downloaded raw CSV here (default name from the generator):
 INPUT_CSV <- file.path(WORK_DIR, paste0("09v_valPoints_raw", RUN_SUFFIX, ".csv"))
 
-VALIDATORS <- c("lican", "sofi", "val3")   # 3 names → 3 sheets / 3 kml folders
+VALIDATORS <- c("lican", "sofi", "jaime")   # 3 names → 3 sheets / 3 kml folders
 SEED       <- 42
 PIXEL_SIZE <- 10                            # m, Sentinel-2 pixel side
 UTM_EPSG   <- 32719                         # UTM 19S
