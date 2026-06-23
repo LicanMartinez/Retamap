@@ -15,8 +15,8 @@
 // Three strata that PARTITION the territory (enables an unbiased Olofsson area
 // estimator at the scale of the whole study area):
 //   S1 — mapped retama : pixel = 1 in 2017 AND/OR 2025
-//   S2 — near non-retama: not-S1, INSIDE 1 km grid cells (existing asset, see
-//                         GRID_ASSET_NAME below) that contain retama in EITHER
+//   S2 — near non-retama: not-S1, INSIDE 1 km cells (via reduceResolution of
+//                         isRetama to 1 km) that contain retama in EITHER
 //                         validated year (2017 and/or 2025) → FP-prone zones
 //   S3 — far non-retama : not-S1, OUTSIDE those cells (bulk of the area)
 //
@@ -38,12 +38,8 @@ var RUN_SUFFIX = '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k';
 
 var VAL_YEARS = [2017, 2025];   // years validated; also the years that define S2
 
-// Prerequisite: 1 km grid FeatureCollection from 12_gridExport.js
-// (CELL_SIZE=1000, CLIP_TO_ROI=true). Run that script first if this asset does
-// not exist yet. Using the SAME grid cells as the rest of the pipeline (instead
-// of an ad-hoc raster aggregation) keeps S2 boundaries consistent with
-// downstream R/GIS analyses that already key off this grid.
-var GRID_ASSET_NAME = '12_grid_1000m_clipped';
+// No grid-FC prerequisite needed: the near-retama mask is built by
+// reduceResolution (raster-only), not by rasterizing the grid FC.
 
 var SEED       = 42;
 var AREA_SCALE = 100;   // m, coarse scale for stratum-area (Wi) estimation only
@@ -87,43 +83,25 @@ var dataMask = map2017.mask().or(map2025.mask());   // has data in ≥1 val. yea
 var isRetama = m17b.eq(1).or(m25b.eq(1));            // S1 condition; reused below
 
 // =============================================================================
-// 3. NEAR-RETAMA MASK — existing 1 km grid cells that contain retama in either
-//    validated year. (An older per-cell invasion-proportion asset/script,
-//    13_gridInvasionProportion, was tied to an obsolete n12k run and was
-//    deleted from the pipeline — not reused. This redoes the reduce, but only
-//    over VAL_YEARS, against the SAME grid asset used elsewhere.)
+// 3. NEAR-RETAMA MASK — 1 km cells that contain retama in either validated year
 // =============================================================================
-var grid1km = ee.FeatureCollection(ASSET_PREFIX + GRID_ASSET_NAME);
-
-var nearCells = isRetama.reduceRegions({
-  collection: grid1km,
-  reducer   : ee.Reducer.anyNonZero().setOutputs(['has_retama']),
-  scale     : 10,
-  tileScale : 4
-}).filter(ee.Filter.eq('has_retama', 1));
-
-print('1km grid cells flagged as near-retama:', nearCells.size(), '/', grid1km.size());
-
-// Rasterize flagged cells back to a mask (1 inside, 0 outside) for the stratum logic.
-// NOTE 1: .byte() must be called BEFORE .paint() (the standard EE "rasterize a
-// FeatureCollection" idiom) — calling it after paint()/unmask() left isNear
-// effectively empty.
-// NOTE 2: .paint() outputs a "default projection" image (a coarse, unbounded
-// global grid), NOT the native Sentinel-2 grid. Combining a default-projection
-// image with a native-projection one (isNonRetama, in Section 4) lets EE's
-// projection-inheritance rule silently snap the WHOLE combination onto the
-// wrong grid. Forcing .reproject(nativeProj) here pins isNear onto the same
-// grid as everything else before it gets combined — this is what actually
-// fixed s2/s3 area coming back as 0 (the earlier .byte()-ordering fix alone
-// was necessary but not sufficient).
-var isNear = ee.Image().byte().paint(nearCells, 1).unmask(0)
-  .reproject(nativeProj)
+// Previous attempts used reduceRegions on the grid FC + paint() to rasterize
+// flagged cells, but paint() produces a "default projection" image that didn't
+// combine correctly with native-projection maps (s2/s3 area collapsed to 0).
+// Staying in the raster domain via reduceResolution avoids vector→raster
+// projection mismatches entirely: isRetama is aggregated to 1 km, producing a
+// binary "any retama in this cell" layer aligned to UTM19S.
+var isNear = isRetama
+  .setDefaultProjection(nativeProj)
+  .reduceResolution({
+    reducer  : ee.Reducer.anyNonZero(),
+    maxPixels: 10201,   // (1000/10 + 1)^2, generous for a 1km cell at 10m
+    bestEffort: true
+  })
+  .reproject({crs: UTM19S, scale: 1000})
   .rename('near');
 
-// Diagnostic: area flagged "near" should be large (hundreds of km^2, matching
-// the 842/25498 grid cells) — confirms the rasterization actually worked
-// before relying on it to build the stratum image below.
-print('isNear area (m^2, sanity check — should be large, not 0):',
+print('isNear area (m^2, sanity check — should be hundreds of km^2):',
   ee.Image.pixelArea().updateMask(isNear).reduceRegion({
     reducer  : ee.Reducer.sum(),
     geometry : roiGeom,
@@ -135,21 +113,27 @@ print('isNear area (m^2, sanity check — should be large, not 0):',
 // =============================================================================
 // 4. BUILD STRATUM IMAGE {1,2,3} + carry both map labels
 // =============================================================================
-var isNonRetama = isRetama.not();
-
-// Build from isRetama (native S2 grid) rather than a bare ee.Image.constant().
-// A bare constant has no real projection, and since .where()'s output inherits
-// "self"'s projection at each step, chaining .where() off a constant let the
-// whole computation drift onto a coarse default grid — collapsing s2/s3 area
-// to 0 even though the inputs (isNear, isRetama) were each individually
-// correct. Deriving the base from isRetama keeps everything anchored to
-// nativeProj throughout. isRetama is applied LAST so it always wins over the
-// near-flag (a retama pixel sits, by construction, inside its own "near" cell).
-var stratum = isRetama.multiply(0).add(3).toByte()
-  .where(isNonRetama.and(isNear), 2)
-  .where(isRetama, 1)
+// Arithmetic combination: all operands share band name 'v' to avoid any
+// band-matching ambiguity; all derive from isRetama's projection lineage.
+//   retama=1 → 1;  not-retama, near=1 → 2;  not-retama, far → 3
+// Formula: stratum = r + (1 - r) * (3 - n)
+var r  = isRetama.rename('v');
+var n  = isNear.rename('v');
+var nr = r.multiply(-1).add(1);              // 1 − r  (1 where not retama)
+var stratum = r.add(nr.multiply(n.multiply(-1).add(3)))  // r + (1-r)*(3-n)
+  .toByte()
   .updateMask(dataMask)
   .rename('stratum');
+
+// Diagnostic: should show {1: <small>, 2: <medium>, 3: <large>}
+print('Stratum pixel histogram (sanity check):',
+  stratum.reduceRegion({
+    reducer  : ee.Reducer.frequencyHistogram(),
+    geometry : roiGeom,
+    scale    : AREA_SCALE,
+    maxPixels: 1e13,
+    tileScale: 4
+  }));
 
 // Bands carrying the per-year final-map label (masked → property absent → NA).
 var stratStack = stratum
