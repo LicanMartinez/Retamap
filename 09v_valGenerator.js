@@ -101,21 +101,36 @@ var nearCells = isRetama.reduceRegions({
 print('1km grid cells flagged as near-retama:', nearCells.size(), '/', grid1km.size());
 
 // Rasterize flagged cells back to a mask (1 inside, 0 outside) for the stratum logic.
-var isNear = ee.Image().paint(nearCells, 1).unmask(0).toByte().rename('near');
+// NOTE: .byte() must be called BEFORE .paint() (the standard EE "rasterize a
+// FeatureCollection" idiom) — calling it after paint()/unmask() left isNear
+// effectively empty (stratum areas for s2/s3 came back as exactly 0).
+var isNear = ee.Image().byte().paint(nearCells, 1).unmask(0).rename('near');
+
+// Diagnostic: area flagged "near" should be large (hundreds of km^2, matching
+// the 842/25498 grid cells) — confirms the rasterization actually worked
+// before relying on it to build the stratum image below.
+print('isNear area (m^2, sanity check — should be large, not 0):',
+  ee.Image.pixelArea().updateMask(isNear).reduceRegion({
+    reducer  : ee.Reducer.sum(),
+    geometry : roiGeom,
+    scale    : AREA_SCALE,
+    maxPixels: 1e13,
+    tileScale: 4
+  }).get('area'));
 
 // =============================================================================
 // 4. BUILD STRATUM IMAGE {1,2,3} + carry both map labels
 // =============================================================================
 var isNonRetama = isRetama.not();
 
-// Start from isRetama (a 10 m image) to preserve native projection, then carve
-// S2 / S3 out of the non-retama remainder.
-var stratum = isRetama
-  .where(isNonRetama.and(isNear),       2)
-  .where(isNonRetama.and(isNear.not()), 3)
+// Build from an explicit constant default (3 = far) and overwrite progressively;
+// isRetama is applied LAST so it always wins over the near-flag (a retama pixel
+// sits, by construction, inside its own "near" cell).
+var stratum = ee.Image.constant(3).byte()
+  .where(isNonRetama.and(isNear), 2)
+  .where(isRetama, 1)
   .updateMask(dataMask)
-  .rename('stratum')
-  .toByte();
+  .rename('stratum');
 
 // Bands carrying the per-year final-map label (masked → property absent → NA).
 var stratStack = stratum
