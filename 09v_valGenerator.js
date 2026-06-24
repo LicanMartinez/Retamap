@@ -44,6 +44,10 @@ var VAL_YEARS = [2017, 2025];   // years validated; also the years that define S
 var SEED       = 42;
 var AREA_SCALE = 100;   // m, coarse scale for stratum-area (Wi) estimation only
 
+// ── Minimum-distance grid (1 point per cell per stratum) ────────────────────
+var GRID_CELL_SIZE    = 500;   // metres — enforces ~500 m spacing within each stratum
+var OVERSAMPLE_FACTOR = 5;     // draw N×nFinal, then keep 1 per cell via distinct()
+
 var UTM19S  = ee.Projection('EPSG:32719');
 var roi     = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
 var roiGeom = roi.geometry();
@@ -197,21 +201,51 @@ var achievedSE_OA = varTerm('s1').add(varTerm('s2')).add(varTerm('s3')).sqrt();
 print('Achieved overall-accuracy SE given nFinal (cross-check):', achievedSE_OA);
 
 // =============================================================================
-// 7. STRATIFIED SAMPLE (pixel centroids) + carry labels + lon/lat
+// 7. CELL-ID RASTER (for minimum-distance enforcement)
 // =============================================================================
-var samples = stratStack.stratifiedSample({
-  numPoints  : 0,                       // ignored when classPoints is given
+// Quantize UTM coordinates into GRID_CELL_SIZE cells. All 10 m pixels within the
+// same cell share a single cellId → after sampling, distinct('cellId') per stratum
+// guarantees at most 1 point per cell (~GRID_CELL_SIZE spacing).
+var coords = ee.Image.pixelCoordinates(UTM19S);
+var cellX  = coords.select('x').divide(GRID_CELL_SIZE).floor().toInt32();
+var cellY  = coords.select('y').divide(GRID_CELL_SIZE).floor().toInt32();
+var cellId = cellX.multiply(100000).add(cellY).rename('cellId');
+
+var stratStackWithCell = stratStack.addBands(cellId);
+
+// =============================================================================
+// 8. STRATIFIED SAMPLE — oversample + deduplicate by cell
+// =============================================================================
+// Step 1: draw OVERSAMPLE_FACTOR × nFinal points per stratum (random placement).
+var oversampled = stratStackWithCell.stratifiedSample({
+  numPoints  : 0,
   classBand  : 'stratum',
   region     : roiGeom,
   scale      : 10,
   projection : UTM19S,
   classValues: [1, 2, 3],
-  classPoints: [nFinal.s1, nFinal.s2, nFinal.s3],
+  classPoints: [nFinal.s1 * OVERSAMPLE_FACTOR,
+                nFinal.s2 * OVERSAMPLE_FACTOR,
+                nFinal.s3 * OVERSAMPLE_FACTOR],
   seed       : SEED,
   geometries : true,
-  dropNulls  : false,   // keep points whose label is NA in one year (masked)
+  dropNulls  : false,
   tileScale  : 4
 });
+
+// Step 2: per stratum, randomize → keep 1 point per cell → take nFinal.
+var sampleStratum = function(s, n) {
+  return oversampled
+    .filter(ee.Filter.eq('stratum', s))
+    .randomColumn('rand', SEED + s)
+    .sort('rand')
+    .distinct('cellId')
+    .limit(n);
+};
+
+var samples = sampleStratum(1, nFinal.s1)
+  .merge(sampleStratum(2, nFinal.s2))
+  .merge(sampleStratum(3, nFinal.s3));
 
 // Append lon/lat (centroid coordinates) as plain columns for the R step.
 samples = samples.map(function(f) {
@@ -219,14 +253,21 @@ samples = samples.map(function(f) {
   return f.set('lon', c.get(0), 'lat', c.get(1));
 });
 
-// print('Sampled points per stratum:', samples.aggregate_histogram('stratum'));
-// print('First sampled features:', samples.limit(5));
+print('Desired n per stratum:', nFinal);
+print('Actual n per stratum after min-distance filter:',
+      samples.aggregate_histogram('stratum'));
 
 // =============================================================================
-// 8. VISUALISATION
+// 9. VISUALISATION
 // =============================================================================
 Map.centerObject(roi, 9);
 Map.setOptions('SATELLITE');
+
+// Grid cells (vector, for visual inspection only — logic uses raster cellId)
+var gridVis = roiGeom.bounds(1, UTM19S).coveringGrid(UTM19S, GRID_CELL_SIZE);
+Map.addLayer(gridVis, {color: 'aaaaaa', fillColor: '00000000'},
+             GRID_CELL_SIZE + ' m grid', false);
+
 Map.addLayer(stratum, {min: 1, max: 3, palette: ['e31a1c', 'ff7f00', '33a02c']},
              'Strata (1=retama,2=near,3=far)', true, 0.6);
 Map.addLayer(isNear.selfMask(), {palette: ['1f78b4']},
@@ -240,7 +281,7 @@ palByStratum(2, 'orange', 'pts S2 near');
 palByStratum(3, 'green',  'pts S3 far');
 
 // =============================================================================
-// 9. EXPORT raw points (WITH labels) → Drive CSV for 09v_valRandomize.R
+// 10. EXPORT raw points (WITH labels) → Drive CSV for 09v_valRandomize.R
 // =============================================================================
 if (EXPORT_TO_DRIVE) {
   Export.table.toDrive({
