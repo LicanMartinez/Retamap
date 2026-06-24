@@ -49,11 +49,15 @@ var roi     = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
 var roiGeom = roi.geometry();
 
 // ── Olofsson sample-size parameters (editable) ───────────────────────────────
-// n_i = U_i (1 - U_i) / SE^2 , with a per-stratum floor. U_i = expected user's
-// accuracy of the mapped class. These are the SUGGESTED sizes; you may override
-// N_OVERRIDE below (e.g. raise S2 to hunt false positives with more power).
+// n_i = U_i (1 - U_i) / SE_i^2 , with a per-stratum floor. U_i = expected user's
+// accuracy of the mapped class; SE_i = target SE of that stratum's UA. These
+// are the SUGGESTED sizes; you may override via N_OVERRIDE below (e.g. raise S2
+// to hunt false positives with more power). SE is set per stratum: S1 (mapped
+// retama) gets the tightest SE since it drives the paper's retama UA/PA; S2/S3
+// (background) tolerate a looser SE since errors there matter less for the
+// class of interest, which keeps total validator effort down.
 var EXP_UA    = {s1: 0.85, s2: 0.85, s3: 0.9};
-var TARGET_SE = 0.02;
+var TARGET_SE = {s1: 0.02, s2: 0.04, s3: 0.05};
 var FLOOR     = {s1: 0, s2: 0, s3: 0};
 // Set any entry to a number to override the formula; null → use formula value.
 var N_OVERRIDE = {s1: null, s2: null, s3: null};
@@ -166,9 +170,9 @@ var nFormula = function(u, se, floor) {
   return Math.max(Math.ceil((u * (1 - u)) / (se * se)), floor);
 };
 var nSuggest = {
-  s1: nFormula(EXP_UA.s1, TARGET_SE, FLOOR.s1),
-  s2: nFormula(EXP_UA.s2, TARGET_SE, FLOOR.s2),
-  s3: nFormula(EXP_UA.s3, TARGET_SE, FLOOR.s3)
+  s1: nFormula(EXP_UA.s1, TARGET_SE.s1, FLOOR.s1),
+  s2: nFormula(EXP_UA.s2, TARGET_SE.s2, FLOOR.s2),
+  s3: nFormula(EXP_UA.s3, TARGET_SE.s3, FLOOR.s3)
 };
 var nFinal = {
   s1: (N_OVERRIDE.s1 === null) ? nSuggest.s1 : N_OVERRIDE.s1,
@@ -179,14 +183,18 @@ print('Olofsson per-stratum n (formula):', nSuggest);
 print('Per-stratum n USED (after override):', nFinal,
       'TOTAL =', nFinal.s1 + nFinal.s2 + nFinal.s3);
 
-// Olofsson Eq.13 cross-check: total n to reach a target SE of OVERALL accuracy.
-// n_total = ( Σ Wi·Si / S(OA) )^2 , Si = sqrt(Ui(1-Ui)).
-var Si = function(u) { return ee.Number(u * (1 - u)).sqrt(); };
-var sumWS = ee.Number(W.get('s1')).multiply(Si(EXP_UA.s1))
-  .add(ee.Number(W.get('s2')).multiply(Si(EXP_UA.s2)))
-  .add(ee.Number(W.get('s3')).multiply(Si(EXP_UA.s3)));
-print('Olofsson n_total for S(OA)=' + TARGET_SE + ' (cross-check):',
-      sumWS.divide(TARGET_SE).pow(2).ceil());
+// Cross-check: achieved SE of OVERALL accuracy given nFinal (stratified
+// variance, Olofsson et al. 2014 Eq.8): SE(OA) = sqrt( Σ Wi² · Ui(1-Ui) / n_i ).
+// With 3 independent per-stratum SE targets there's no single target left to
+// solve Eq.13 for n_total, so this instead reports the overall-accuracy
+// precision that nFinal actually buys (run the formula backward).
+var varTerm = function(s) {
+  return ee.Number(W.get(s)).pow(2)
+    .multiply(EXP_UA[s] * (1 - EXP_UA[s]))
+    .divide(nFinal[s]);
+};
+var achievedSE_OA = varTerm('s1').add(varTerm('s2')).add(varTerm('s3')).sqrt();
+print('Achieved overall-accuracy SE given nFinal (cross-check):', achievedSE_OA);
 
 // =============================================================================
 // 7. STRATIFIED SAMPLE (pixel centroids) + carry labels + lon/lat

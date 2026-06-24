@@ -18,8 +18,14 @@
 #   4. kml/<validator>/<pxid>.kml — per-point KML (centroid + 10 m contour) for
 #                                  Google Earth Pro historical imagery.
 #
-# Design: 3 strata, N drawn by Olofsson (set in the generator). 3 validators;
-# each point is assigned to 2 of the 3 (round-robin pairs AB/BC/CA), balanced.
+# Design: 3 strata, N drawn by Olofsson (set in the generator, per-stratum SE).
+# 3 validators. Validation load is NOT uniform across strata:
+#   - S1 (mapped retama): PAIR-validated, 2 of 3 (round-robin pairs AB/BC/CA).
+#     This is the stratum that drives the paper's retama UA/PA, so it keeps
+#     inter-observer agreement (kappa) and disagreement-discarding as QC.
+#   - S2/S3 (background): SINGLE-validated, 1 of 3 (round-robin A/B/C). Cuts
+#     effort roughly in half for the bulk of the points, where a labelling
+#     error matters less for the metrics that matter for the paper.
 # pxid is a SHUFFLED sequential id so strata are not contiguous in the sheets.
 # =============================================================================
 
@@ -65,13 +71,26 @@ raw$pxid <- sprintf(paste0("px%0", width, "d"), seq_len(nrow(raw)))
 rownames(raw) <- NULL
 
 # =============================================================================
-# 3. ASSIGN VALIDATORS (each point to 2 of 3, round-robin pairs)
+# 3. ASSIGN VALIDATORS
+#    - S1: pair-validation, 2 of 3 (round-robin pairs AB/BC/CA)
+#    - S2/S3: single validation, 1 of 3 (round-robin A/B/C)
 # =============================================================================
 pairs <- list(c(1, 2), c(2, 3), c(1, 3))             # AB, BC, CA
-pidx  <- (seq_len(nrow(raw)) - 1) %% 3 + 1
-raw$validators <- vapply(pidx, function(k)
+is_s1 <- raw$stratum == 1
+raw$validators <- NA_character_
+
+idx_pair <- which(is_s1)
+pidx     <- (seq_along(idx_pair) - 1) %% 3 + 1
+raw$validators[idx_pair] <- vapply(pidx, function(k)
   paste(VALIDATORS[pairs[[k]]], collapse = ";"), character(1))
-cat("Validator load (points each):\n")
+
+idx_single <- which(!is_s1)
+sidx       <- (seq_along(idx_single) - 1) %% 3 + 1
+raw$validators[idx_single] <- VALIDATORS[sidx]
+
+cat(sprintf("S1 pair-validated: %d points | S2+S3 single-validated: %d points\n",
+            length(idx_pair), length(idx_single)))
+cat("Validator load (points assigned, pair- + single-validated combined):\n")
 print(sapply(VALIDATORS, function(v) sum(grepl(v, raw$validators))))
 
 # =============================================================================
@@ -140,7 +159,7 @@ for (v in VALIDATORS) dir.create(file.path(WORK_DIR, "kml", v), showWarnings = F
 for (i in seq_len(nrow(raw))) {
   ring <- ring_all[ring_all[, fid_col] == i, c("X", "Y"), drop = FALSE]
   kml  <- make_kml(raw$pxid[i], raw$lon[i], raw$lat[i], ring)
-  for (v in VALIDATORS[pairs[[pidx[i]]]]) {
+  for (v in strsplit(raw$validators[i], ";")[[1]]) {
     writeLines(kml, file.path(WORK_DIR, "kml", v, paste0(raw$pxid[i], ".kml")))
   }
 }
