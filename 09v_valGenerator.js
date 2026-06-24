@@ -77,12 +77,14 @@ var m25b = map2025.unmask(0);
 
 var isRetama = m17b.eq(1).or(m25b.eq(1));            // S1 condition; reused below
 
-// Data mask: pixels that carry a real classification (0 or 1) in ≥1 year.
-// 08_RF2patchFilter uses .selfMask() internally, so class-0 may end up masked
-// (nodata) in the exported assets. Using .unmask(sentinel).lte(1) detects real
-// data regardless of mask: unmask fills truly-masked pixels with 2, then lte(1)
-// keeps only 0 and 1.
-var dataMask = map2017.unmask(2).lte(1).or(map2025.unmask(2).lte(1));
+// Data mask: the 08_RF2_prediction assets are PRESENCE maps — only retama
+// (value 1) is stored, everything else is nodata (NOT value 0). So the asset
+// cannot define the "valid territory" for the non-retama strata. Instead, take
+// the valid-land mask (water + elevation already excluded) from 01_MergedBands,
+// which is the actual observation footprint the model ran on.
+var landMask = ee.Image(ASSET_PREFIX + '01_MergedBands_2017').select(0).mask()
+  .or(ee.Image(ASSET_PREFIX + '01_MergedBands_2025').select(0).mask());
+var dataMask = landMask;
 
 print('DEBUG dataMask area (m^2, should be full ROI, >> 55 M):',
   ee.Image.pixelArea().updateMask(dataMask).reduceRegion({
