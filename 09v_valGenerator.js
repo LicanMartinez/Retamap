@@ -52,11 +52,11 @@ var roiGeom = roi.geometry();
 // n_i = U_i (1 - U_i) / SE^2 , with a per-stratum floor. U_i = expected user's
 // accuracy of the mapped class. These are the SUGGESTED sizes; you may override
 // N_OVERRIDE below (e.g. raise S2 to hunt false positives with more power).
-var EXP_UA    = {s1: 0.90, s2: 0.95, s3: 0.99};
-var TARGET_SE = 0.04;
-var FLOOR     = {s1: 30, s2: 50, s3: 20};
+var EXP_UA    = {s1: 0.85, s2: 0.85, s3: 0.9};
+var TARGET_SE = 0.02;
+var FLOOR     = {s1: 0, s2: 0, s3: 0};
 // Set any entry to a number to override the formula; null → use formula value.
-var N_OVERRIDE = {s1: null, s2: 150, s3: 30};
+var N_OVERRIDE = {s1: null, s2: null, s3: null};
 
 // =============================================================================
 // 1. LOAD FINAL MAPS (Stage C)
@@ -86,11 +86,11 @@ var landMask = ee.Image(ASSET_PREFIX + '01_MergedBands_2017').select(0).mask()
   .or(ee.Image(ASSET_PREFIX + '01_MergedBands_2025').select(0).mask());
 var dataMask = landMask;
 
-print('DEBUG dataMask area (m^2, should be full ROI, >> 55 M):',
-  ee.Image.pixelArea().updateMask(dataMask).reduceRegion({
-    reducer: ee.Reducer.sum(), geometry: roiGeom, scale: AREA_SCALE,
-    maxPixels: 1e13, tileScale: 4
-  }).get('area'));
+// print('DEBUG dataMask area (m^2, should be full ROI, >> 55 M):',
+//   ee.Image.pixelArea().updateMask(dataMask).reduceRegion({
+//     reducer: ee.Reducer.sum(), geometry: roiGeom, scale: AREA_SCALE,
+//     maxPixels: 1e13, tileScale: 4
+//   }).get('area'));
 
 // =============================================================================
 // 3. NEAR-RETAMA MASK — non-retama within ~1 km of retama (FP-prone zone)
@@ -102,11 +102,11 @@ var isNear = isRetama
   .focal_max({radius: 500, units: 'meters', kernelType: 'square'})
   .rename('near');
 
-print('isNear area (m^2, sanity check — should be hundreds of km^2):',
-  ee.Image.pixelArea().updateMask(isNear).reduceRegion({
-    reducer: ee.Reducer.sum(), geometry: roiGeom, scale: AREA_SCALE,
-    maxPixels: 1e13, tileScale: 4
-  }).get('area'));
+// print('isNear area (m^2, sanity check — should be hundreds of km^2):',
+//   ee.Image.pixelArea().updateMask(isNear).reduceRegion({
+//     reducer: ee.Reducer.sum(), geometry: roiGeom, scale: AREA_SCALE,
+//     maxPixels: 1e13, tileScale: 4
+//   }).get('area'));
 
 // =============================================================================
 // 4. BUILD STRATUM IMAGE {1,2,3} + carry both map labels
@@ -124,14 +124,14 @@ var stratum = r.add(nr.multiply(n.multiply(-1).add(3)))  // r + (1-r)*(3-n)
   .rename('stratum');
 
 // Diagnostic: should show {1: <count>, 2: <count>, 3: <count>}
-print('Stratum pixel histogram (sanity check):',
-  stratum.reduceRegion({
-    reducer  : ee.Reducer.frequencyHistogram(),
-    geometry : roiGeom,
-    scale    : AREA_SCALE,
-    maxPixels: 1e13,
-    tileScale: 4
-  }));
+// print('Stratum pixel histogram (sanity check):',
+//   stratum.reduceRegion({
+//     reducer  : ee.Reducer.frequencyHistogram(),
+//     geometry : roiGeom,
+//     scale    : AREA_SCALE,
+//     maxPixels: 1e13,
+//     tileScale: 4
+//   }));
 
 // Bands carrying the per-year final-map label (masked → property absent → NA).
 var stratStack = stratum
@@ -211,8 +211,8 @@ samples = samples.map(function(f) {
   return f.set('lon', c.get(0), 'lat', c.get(1));
 });
 
-print('Sampled points per stratum:', samples.aggregate_histogram('stratum'));
-print('First sampled features:', samples.limit(5));
+// print('Sampled points per stratum:', samples.aggregate_histogram('stratum'));
+// print('First sampled features:', samples.limit(5));
 
 // =============================================================================
 // 8. VISUALISATION

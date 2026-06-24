@@ -25,9 +25,9 @@
 // =============================================================================
 // 0. VALIDATOR INPUTS  (edit these) 
 // =============================================================================
-var PXID      = 'px001';
+var PXID      = 'px002';
 var YEAR      = 2017; 
-var VALIDATOR = 'lican';
+var VALIDATOR = 'jaime';
 
 var ASSET_PREFIX = 'projects/ee-licanemartinez/assets/Retamap/';
 var FC_ASSET     = ASSET_PREFIX + '09v_valPoints_fc';
