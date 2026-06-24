@@ -69,54 +69,50 @@ var finalMap = function(year) {
 var map2017 = finalMap(2017);
 var map2025 = finalMap(2025);
 
-// Anchor for all stratum-building ops below — avoids the ee.Image.constant()
-// "default projection" pitfall (see Section 4 note).
-var nativeProj = map2017.projection();
-
 // =============================================================================
 // 2. S1 CONDITION — retama in 2017 and/or 2025
 // =============================================================================
 var m17b = map2017.unmask(0);
 var m25b = map2025.unmask(0);
 
-var dataMask = map2017.mask().or(map2025.mask());   // has data in ≥1 val. year
 var isRetama = m17b.eq(1).or(m25b.eq(1));            // S1 condition; reused below
 
+// Data mask: pixels that carry a real classification (0 or 1) in ≥1 year.
+// 08_RF2patchFilter uses .selfMask() internally, so class-0 may end up masked
+// (nodata) in the exported assets. Using .unmask(sentinel).lte(1) detects real
+// data regardless of mask: unmask fills truly-masked pixels with 2, then lte(1)
+// keeps only 0 and 1.
+var dataMask = map2017.unmask(2).lte(1).or(map2025.unmask(2).lte(1));
+
+print('DEBUG dataMask area (m^2, should be full ROI, >> 55 M):',
+  ee.Image.pixelArea().updateMask(dataMask).reduceRegion({
+    reducer: ee.Reducer.sum(), geometry: roiGeom, scale: AREA_SCALE,
+    maxPixels: 1e13, tileScale: 4
+  }).get('area'));
+
 // =============================================================================
-// 3. NEAR-RETAMA MASK — 1 km cells that contain retama in either validated year
+// 3. NEAR-RETAMA MASK — non-retama within ~1 km of retama (FP-prone zone)
 // =============================================================================
-// Previous attempts used reduceRegions on the grid FC + paint() to rasterize
-// flagged cells, but paint() produces a "default projection" image that didn't
-// combine correctly with native-projection maps (s2/s3 area collapsed to 0).
-// Staying in the raster domain via reduceResolution avoids vector→raster
-// projection mismatches entirely: isRetama is aggregated to 1 km, producing a
-// binary "any retama in this cell" layer aligned to UTM19S.
+// focal_max dilates isRetama by 500 m in each direction (≈ 1 km square window).
+// Stays entirely in the native Sentinel-2 projection — no vector rasterization,
+// no reduceResolution, no reproject.
 var isNear = isRetama
-  .setDefaultProjection(nativeProj)
-  .reduceResolution({
-    reducer  : ee.Reducer.anyNonZero(),
-    maxPixels: 10201,   // (1000/10 + 1)^2, generous for a 1km cell at 10m
-    bestEffort: true
-  })
-  .reproject({crs: UTM19S, scale: 1000})
+  .focal_max({radius: 500, units: 'meters', kernelType: 'square'})
   .rename('near');
 
 print('isNear area (m^2, sanity check — should be hundreds of km^2):',
   ee.Image.pixelArea().updateMask(isNear).reduceRegion({
-    reducer  : ee.Reducer.sum(),
-    geometry : roiGeom,
-    scale    : AREA_SCALE,
-    maxPixels: 1e13,
-    tileScale: 4
+    reducer: ee.Reducer.sum(), geometry: roiGeom, scale: AREA_SCALE,
+    maxPixels: 1e13, tileScale: 4
   }).get('area'));
 
 // =============================================================================
 // 4. BUILD STRATUM IMAGE {1,2,3} + carry both map labels
 // =============================================================================
-// Arithmetic combination: all operands share band name 'v' to avoid any
-// band-matching ambiguity; all derive from isRetama's projection lineage.
-//   retama=1 → 1;  not-retama, near=1 → 2;  not-retama, far → 3
-// Formula: stratum = r + (1 - r) * (3 - n)
+// Arithmetic combination avoiding .where()/.and()/.not() that had projection
+// ambiguity issues. All operands share band name 'v'.
+//   retama → 1;  not-retama, near → 2;  not-retama, far → 3
+// Formula: stratum = r + (1 − r) × (3 − n)
 var r  = isRetama.rename('v');
 var n  = isNear.rename('v');
 var nr = r.multiply(-1).add(1);              // 1 − r  (1 where not retama)
@@ -125,7 +121,7 @@ var stratum = r.add(nr.multiply(n.multiply(-1).add(3)))  // r + (1-r)*(3-n)
   .updateMask(dataMask)
   .rename('stratum');
 
-// Diagnostic: should show {1: <small>, 2: <medium>, 3: <large>}
+// Diagnostic: should show {1: <count>, 2: <count>, 3: <count>}
 print('Stratum pixel histogram (sanity check):',
   stratum.reduceRegion({
     reducer  : ee.Reducer.frequencyHistogram(),
@@ -223,8 +219,8 @@ Map.centerObject(roi, 9);
 Map.setOptions('SATELLITE');
 Map.addLayer(stratum, {min: 1, max: 3, palette: ['e31a1c', 'ff7f00', '33a02c']},
              'Strata (1=retama,2=near,3=far)', true, 0.6);
-Map.addLayer(nearCells, {color: '1f78b4', fillColor: '1f78b422'},
-             '1km cells near-retama', false);
+Map.addLayer(isNear.selfMask(), {palette: ['1f78b4']},
+             'Near-retama zone', false, 0.3);
 var palByStratum = function(s, color, name) {
   Map.addLayer(samples.filter(ee.Filter.eq('stratum', s)),
                {color: color}, name, true);
