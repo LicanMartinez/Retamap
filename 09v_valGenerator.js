@@ -197,6 +197,80 @@ var achievedSE_OA = varTerm('s1').add(varTerm('s2')).add(varTerm('s3')).sqrt();
 print('Achieved overall-accuracy SE given nFinal (cross-check):', achievedSE_OA);
 
 // =============================================================================
+// 6b. EXPECTED SE OF PRODUCER'S ACCURACY (delta method)
+// =============================================================================
+// §6 targets SE of User's Accuracy per stratum. But PA depends on how omission
+// errors in OTHER strata combine, weighted by Wi². Delta method on the ratio
+// PA_j = p_jj / p_·j  gives SE(PA) for each reference class, so you can tune
+// TARGET_SE until PA precision matches UA precision.
+//
+// Binary reference classes:  retama (1) / non-retama (0)
+// q_i = P(truly retama | stratum i):
+//   S1: q = UA_S1          S2: q = 1−UA_S2 (omission)   S3: q = 1−UA_S3
+//
+// PA_ret = W1·q1 / (W1·q1 + W2·q2 + W3·q3)
+// V(PA)  = Σ (∂PA/∂q_i)² · q_i(1−q_i)/n_i
+
+var _W1 = ee.Number(W.get('s1'));
+var _W2 = ee.Number(W.get('s2'));
+var _W3 = ee.Number(W.get('s3'));
+
+// ── PA retama ────────────────────────────────────────────────────────────────
+var qR1 = EXP_UA.s1,  qR2 = 1 - EXP_UA.s2,  qR3 = 1 - EXP_UA.s3;
+
+var paN  = _W1.multiply(qR1);
+var paD  = paN.add(_W2.multiply(qR2)).add(_W3.multiply(qR3));
+var paRet = paN.divide(paD);
+
+var paD2 = paD.pow(2);
+var dr1 = _W1.multiply(paD.subtract(paN)).divide(paD2);     // ∂PA/∂q1
+var dr2 = paN.multiply(-1).multiply(_W2).divide(paD2);      // ∂PA/∂q2
+var dr3 = paN.multiply(-1).multiply(_W3).divide(paD2);      // ∂PA/∂q3
+
+var vr1 = qR1*(1-qR1)/nFinal.s1;
+var vr2 = qR2*(1-qR2)/nFinal.s2;
+var vr3 = qR3*(1-qR3)/nFinal.s3;
+
+var cR1 = dr1.pow(2).multiply(vr1);
+var cR2 = dr2.pow(2).multiply(vr2);
+var cR3 = dr3.pow(2).multiply(vr3);
+var vPaRet = cR1.add(cR2).add(cR3);
+var sePaRet = vPaRet.sqrt();
+
+print('─── Expected PA & SE (delta method) ────────────────────');
+print('RETAMA  — E[PA]:', paRet, '  SE(PA):', sePaRet,
+      '  (cf. SE(UA) = ' + TARGET_SE.s1 + ')');
+print('  V(PA) % by stratum →  S1:', cR1.divide(vPaRet).multiply(100),
+      '  S2:', cR2.divide(vPaRet).multiply(100),
+      '  S3:', cR3.divide(vPaRet).multiply(100));
+
+// ── PA non-retama ────────────────────────────────────────────────────────────
+var qN1 = 1 - EXP_UA.s1,  qN2 = EXP_UA.s2,  qN3 = EXP_UA.s3;
+var paNn = _W2.multiply(qN2).add(_W3.multiply(qN3));
+var paNd = _W1.multiply(qN1).add(paNn);
+var paNR = paNn.divide(paNd);
+
+var paNd2 = paNd.pow(2);
+var dn1 = paNn.multiply(-1).multiply(_W1).divide(paNd2);    // ∂PA/∂q10
+var dn2 = _W2.multiply(_W1.multiply(qN1)).divide(paNd2);    // ∂PA/∂q20
+var dn3 = _W3.multiply(_W1.multiply(qN1)).divide(paNd2);    // ∂PA/∂q30
+
+var vn1 = qN1*(1-qN1)/nFinal.s1;
+var vn2 = qN2*(1-qN2)/nFinal.s2;
+var vn3 = qN3*(1-qN3)/nFinal.s3;
+
+var cN1 = dn1.pow(2).multiply(vn1);
+var cN2 = dn2.pow(2).multiply(vn2);
+var cN3 = dn3.pow(2).multiply(vn3);
+var vPaNR = cN1.add(cN2).add(cN3);
+var sePaNR = vPaNR.sqrt();
+
+print('NON-RET — E[PA]:', paNR, '  SE(PA):', sePaNR);
+print('  V(PA) % by stratum →  S1:', cN1.divide(vPaNR).multiply(100),
+      '  S2:', cN2.divide(vPaNR).multiply(100),
+      '  S3:', cN3.divide(vPaNR).multiply(100));
+
+// =============================================================================
 // 7. STRATIFIED SAMPLE (pixel centroids) + carry labels + lon/lat
 // =============================================================================
 var samples = stratStack.stratifiedSample({
