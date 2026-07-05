@@ -15,3 +15,4 @@ experimental/
 # Independent-validation working artifacts (master key carries labels →
 # never publish; FC/sheets/kml are bulky local outputs of 09v_valRandomize.R)
 validation_independent/
+validation_independent_near/

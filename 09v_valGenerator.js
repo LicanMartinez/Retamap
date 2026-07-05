@@ -44,21 +44,30 @@ var VAL_YEARS = [2017, 2025];   // years validated; also the years that define S
 var SEED       = 42;
 var AREA_SCALE = 100;   // m, coarse scale for stratum-area (Wi) estimation only
 
+// ── Minimum-distance grid (1 point per cell per stratum) ────────────────────
+// Quantize the map into GRID_CELL_SIZE cells; after sampling keep at most one
+// point per cell PER STRATUM (via distinct('cellId')) → ~GRID_CELL_SIZE spacing
+// within each stratum. Approximate: two points in adjacent cells can fall closer
+// than GRID_CELL_SIZE near a shared cell edge. Dedup is per-stratum, so an S1 and
+// an S2 point may still be <GRID_CELL_SIZE apart (accepted).
+var GRID_CELL_SIZE    = 500;   // metres — target spacing within each stratum
+var OVERSAMPLE_FACTOR = 5;     // draw N×nFinal, then keep 1 per cell via distinct()
+
 var UTM19S  = ee.Projection('EPSG:32719');
 var roi     = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
 var roiGeom = roi.geometry();
 
 // ── Olofsson sample-size parameters (editable) ───────────────────────────────
-// n_i = U_i (1 - U_i) / SE_i^2 , with a per-stratum floor. U_i = expected user's
-// accuracy of the mapped class; SE_i = target SE of that stratum's UA. These
-// are the SUGGESTED sizes; you may override via N_OVERRIDE below (e.g. raise S2
-// to hunt false positives with more power). SE is set per stratum: S1 (mapped
-// retama) gets the tightest SE since it drives the paper's retama UA/PA; S2/S3
-// (background) tolerate a looser SE since errors there matter less for the
-// class of interest, which keeps total validator effort down.
-var EXP_UA    = {s1: 0.85, s2: 0.85, s3: 0.9};
-var TARGET_SE = {s1: 0.02, s2: 0.04, s3: 0.05};
-var FLOOR     = {s1: 0, s2: 0, s3: 0};
+// n_i = max( U_i (1 - U_i) / SE_i^2 , FLOOR_i ). U_i = expected user's accuracy of
+// the mapped class; SE_i = target SE of that stratum's UA; FLOOR_i = minimum n per
+// stratum (safety net). These are the SUGGESTED sizes; you may override via
+// N_OVERRIDE below (e.g. raise S2 to hunt false positives with more power). Current
+// config: SE = 0.02 on all three strata (tight, equal) + FLOOR = 100 each → formula
+// gives ~400/400/119 (total ~919); the floor only binds if a stratum has few 500 m
+// cells (plausible for S1 / retama).
+var EXP_UA    = {s1: 0.8, s2: 0.8, s3: 0.95};
+var TARGET_SE = {s1: 0.02, s2: 0.02, s3: 0.02};
+var FLOOR     = {s1: 100, s2: 100, s3: 100};
 // Set any entry to a number to override the formula; null → use formula value.
 var N_OVERRIDE = {s1: null, s2: null, s3: null};
 
@@ -271,21 +280,52 @@ print('  V(PA) % by stratum →  S1:', cN1.divide(vPaNR).multiply(100),
       '  S3:', cN3.divide(vPaNR).multiply(100));
 
 // =============================================================================
-// 7. STRATIFIED SAMPLE (pixel centroids) + carry labels + lon/lat
+// 7. CELL-ID RASTER (for minimum-distance enforcement)
 // =============================================================================
-var samples = stratStack.stratifiedSample({
+// Quantize UTM coordinates into GRID_CELL_SIZE cells. All 10 m pixels within the
+// same cell share a single cellId → after sampling, distinct('cellId') per stratum
+// keeps at most 1 point per cell (~GRID_CELL_SIZE spacing). Raster-only, no vector
+// grid asset needed.
+var coords = ee.Image.pixelCoordinates(UTM19S);
+var cellX  = coords.select('x').divide(GRID_CELL_SIZE).floor().toInt32();
+var cellY  = coords.select('y').divide(GRID_CELL_SIZE).floor().toInt32();
+var cellId = cellX.multiply(100000).add(cellY).rename('cellId');
+
+var stratStackWithCell = stratStack.addBands(cellId);
+
+// =============================================================================
+// 8. STRATIFIED SAMPLE — oversample + deduplicate by cell + lon/lat
+// =============================================================================
+// Step 1: draw OVERSAMPLE_FACTOR × nFinal points per stratum (random placement).
+var oversampled = stratStackWithCell.stratifiedSample({
   numPoints  : 0,                       // ignored when classPoints is given
   classBand  : 'stratum',
   region     : roiGeom,
   scale      : 10,
   projection : UTM19S,
   classValues: [1, 2, 3],
-  classPoints: [nFinal.s1, nFinal.s2, nFinal.s3],
+  classPoints: [nFinal.s1 * OVERSAMPLE_FACTOR,
+                nFinal.s2 * OVERSAMPLE_FACTOR,
+                nFinal.s3 * OVERSAMPLE_FACTOR],
   seed       : SEED,
   geometries : true,
   dropNulls  : false,   // keep points whose label is NA in one year (masked)
   tileScale  : 4
 });
+
+// Step 2: per stratum, randomize → keep 1 point per cell → take nFinal.
+var sampleStratum = function(s, n) {
+  return oversampled
+    .filter(ee.Filter.eq('stratum', s))
+    .randomColumn('rand', SEED + s)
+    .sort('rand')
+    .distinct('cellId')
+    .limit(n);
+};
+
+var samples = sampleStratum(1, nFinal.s1)
+  .merge(sampleStratum(2, nFinal.s2))
+  .merge(sampleStratum(3, nFinal.s3));
 
 // Append lon/lat (centroid coordinates) as plain columns for the R step.
 samples = samples.map(function(f) {
@@ -293,14 +333,21 @@ samples = samples.map(function(f) {
   return f.set('lon', c.get(0), 'lat', c.get(1));
 });
 
-// print('Sampled points per stratum:', samples.aggregate_histogram('stratum'));
-// print('First sampled features:', samples.limit(5));
+print('Desired n per stratum:', nFinal);
+print('Actual n per stratum after min-distance filter:',
+      samples.aggregate_histogram('stratum'));
 
 // =============================================================================
-// 8. VISUALISATION
+// 9. VISUALISATION
 // =============================================================================
 Map.centerObject(roi, 9);
 Map.setOptions('SATELLITE');
+
+// Grid cells (vector, for visual inspection only — logic uses the raster cellId)
+var gridVis = roiGeom.bounds(1, UTM19S).coveringGrid(UTM19S, GRID_CELL_SIZE);
+Map.addLayer(gridVis, {color: 'aaaaaa', fillColor: '00000000'},
+             GRID_CELL_SIZE + ' m grid', false);
+
 Map.addLayer(stratum, {min: 1, max: 3, palette: ['e31a1c', 'ff7f00', '33a02c']},
              'Strata (1=retama,2=near,3=far)', true, 0.6);
 Map.addLayer(isNear.selfMask(), {palette: ['1f78b4']},
@@ -314,7 +361,7 @@ palByStratum(2, 'orange', 'pts S2 near');
 palByStratum(3, 'green',  'pts S3 far');
 
 // =============================================================================
-// 9. EXPORT raw points (WITH labels) → Drive CSV for 09v_valRandomize.R
+// 10. EXPORT raw points (WITH labels) → Drive CSV for 09v_valRandomize.R
 // =============================================================================
 if (EXPORT_TO_DRIVE) {
   Export.table.toDrive({
