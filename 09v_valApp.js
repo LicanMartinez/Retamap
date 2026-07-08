@@ -43,9 +43,9 @@ var VAL_YEARS  = ['2017', '2025'];
 // Fill these in AFTER creating the three Google Sheets (one per validator).
 // Leave '' and the app just shows a hint instead of a working link.
 var SHEET_URLS = {
-  lican: '',
-  sofi:  '',
-  jaime: ''
+  lican: 'https://docs.google.com/spreadsheets/d/1wm9Ie9bp0FGXwN54wPTyRSGPYqUC2tMmiZD78msWzBA/edit?usp=sharing',
+  sofi:  'https://docs.google.com/spreadsheets/d/1kVk5R2ZJfVYEGUx9JLCX_FG7v_PaGhSQtY6rCxBCigA/edit?usp=sharing',
+  jaime: 'https://docs.google.com/spreadsheets/d/1fD79Y1mDHW8kDuvrp4l4aAz2BkfmeYy0q1I0nl6bM9Q/edit?usp=sharing'
 };
 
 // Shared visualization params (identical to 09v_valInspector_TEMPLATE.js).
