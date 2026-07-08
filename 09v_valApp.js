@@ -192,13 +192,25 @@ function render(recenter) {
 
   // Four mosaic layers from 01_MergedBands_<year> ------------------------------
   var merged = ee.Image(ASSET_PREFIX + '01_MergedBands_' + year).clip(aoi);
+  var proj10 = merged.select('B4').projection();   // mosaic's native pixel grid
+
+  // Target pixel highlighted as a RASTER on the mosaic's own grid, so it
+  // reprojects to the display exactly like the mosaic → no half-pixel drift.
+  // (The FC contour is a vector built on the UTM sampling grid, which does not
+  // coincide with the mosaic grid, hence the previous offset.) Blind: derived
+  // from centro + raw imagery only, never from m2017/m2025 or predictions.
+  var pixHi = ee.Image(0).byte()
+    .paint(ee.FeatureCollection([ee.Feature(centro)]), 1)   // pixel under centro = 1
+    .selfMask()
+    .reproject(proj10);                                     // snap to mosaic grid
+
   map.layers().reset();
   map.addLayer(aoi, {color: 'ffffff'}, '1km AOI', false);
   map.addLayer(merged, visTC, year + ' TrueColor NovDec', true);
   map.addLayer(merged.select('NDYI'), NDYI_VIS, year + ' NDYI NovDec', false);
   map.addLayer(merged, visTC_feb, year + ' TrueColor Feb', false);
   map.addLayer(merged.select('NDYI_feb'), NDYI_VIS, year + ' NDYI Feb', false);
-  map.addLayer(contour, {color: 'FF0000', fillColor: '00000000'}, 'pixel ' + pxid, true);
+  map.addLayer(pixHi, {palette: ['FF0000']}, 'pixel ' + pxid, true, 0.4);
   map.addLayer(centro, {color: '00FFFF'}, 'centroid', true);
   if (recenter) map.centerObject(contour, 18);
 
