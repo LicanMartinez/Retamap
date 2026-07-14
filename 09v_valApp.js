@@ -199,7 +199,8 @@ function buildS2Chart(region, year, span, label, colors) {
     xProperty: 'system:time_start'
   }).setOptions({
     title: 'Sentinel-2 NDYI  Ago ' + w.y0 + '–Mar ' + w.y1 + '  (' + label + ')',
-    hAxis: {title: 'fecha'}, vAxis: {title: 'NDYI (media región)'},
+    hAxis: {title: 'fecha'},
+    vAxis: {title: 'NDYI (media región)', viewWindow: {min: -0.3, max: 0.5}},
     pointSize: 4, lineWidth: 1, colors: colors || ['1f78b4']
   });
 }
