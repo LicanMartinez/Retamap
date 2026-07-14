@@ -69,7 +69,7 @@ var fc = ee.FeatureCollection(FC_ASSET);
 // span  = plotted window in years (1 = just the target season; N adds N-1 extra
 //         years on each side). clicked = optional user-clicked comparison point.
 var state = {validator: null, list: [], idx: 0, year: 2017, span: 1,
-             aoi: null, clicked: null};
+             aoi: null, centro: null, clicked: null};
 var clickedLayer = null;   // ref to the clicked-point map layer (for removal)
 
 
@@ -236,7 +236,7 @@ function buildHlsChart(region, year, span, label, colors) {
 
 // ── 3c. (Re)build the chart panel: validated pixel + optional clicked point ──
 function refreshCharts() {
-  if (!state.validator || !state.aoi) return;
+  if (!state.validator || !state.centro) return;
   var pxid = state.list[state.idx];
   var year = state.year, span = state.span;
 
@@ -244,12 +244,13 @@ function refreshCharts() {
   chartPanel.add(ui.Label('Serie NDYI (apoyo fenológico)',
                           {fontWeight: 'bold', fontSize: '13px', margin: '4px 8px'}));
 
-  // Validated pixel (1 km AOI mean) — blue.
+  // Validated pixel — reduced over the target pixel (centroid), NOT the 1 km AOI,
+  // so it matches clicking that same pixel (AOI mean would dilute the bloom to ~0).
   chartPanel.add(ui.Label('▍Píxel validado: ' + pxid,
                           {fontSize: '12px', color: '#1f78b4', margin: '4px 8px 0 8px'}));
-  chartPanel.add(buildS2Chart(state.aoi, year, span, pxid, ['1f78b4']));
+  chartPanel.add(buildS2Chart(state.centro, year, span, pxid, ['1f78b4']));
   // HLS del píxel validado (descomentar para prenderla — S2 y HLS pueden convivir):
-  // chartPanel.add(buildHlsChart(state.aoi, year, span, pxid, ['1b7837']));
+  // chartPanel.add(buildHlsChart(state.centro, year, span, pxid, ['1b7837']));
 
   // Optional clicked comparison point — magenta.
   if (state.clicked) {
@@ -281,7 +282,8 @@ function render(recenter) {
   var contour = feat.geometry();
   var centro  = contour.centroid(1);
   var aoi     = centro.buffer(500).bounds();
-  state.aoi   = aoi;   // remembered so refreshCharts() can rebuild on span/click
+  state.aoi    = aoi;      // 1 km box: map extent / clip only
+  state.centro = centro;   // target pixel: region for the validated NDYI chart
 
   // Four mosaic layers from 01_MergedBands_<year> ------------------------------
   var merged = ee.Image(ASSET_PREFIX + '01_MergedBands_' + year).clip(aoi);
