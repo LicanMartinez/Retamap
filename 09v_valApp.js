@@ -22,8 +22,8 @@
 //
 // REFERENCE PRIORITY: high-resolution imagery in Google Earth Pro (visible yellow
 // bloom, open the matching <pxid>.kml) is the PRIMARY evidence. The mosaics and the
-// HLS NDYI series here are phenological SUPPORT only — they reuse the model's own
-// features, so don't let them be the sole criterion (avoid circularity).
+// Sentinel-2 NDYI series here are phenological SUPPORT only — they reuse the model's
+// own features, so don't let them be the sole criterion (avoid circularity).
 // =============================================================================
 
 
@@ -49,7 +49,9 @@ var SHEET_URLS = {
 };
 
 // Shared visualization params (identical to 09v_valInspector_TEMPLATE.js).
-var NDYI_VIS = {min: 0, max: 0.4, palette: ['ffffff', 'ffff66', 'ff9900', 'cc3300']};
+// var NDYI_VIS = {min: 0, max: 0.2, palette: ['ffffff', 'ffff66', 'ff9900', 'cc3300']};
+// var NDYI_VIS = {min: 0, max: 0.2, palette: ['000000', '990000', 'ff9900', 'ffff66']};
+var NDYI_VIS = {min: 0, max: 0.2, palette: ['000000', '990000', 'ff9900', 'ffff66']};
 var visTC = {
   bands: ['B4', 'B3', 'B2'],
   min: [300, 300, 500],   // higher 3rd value tames the blue haze / shadows
@@ -64,7 +66,11 @@ var fc = ee.FeatureCollection(FC_ASSET);
 // =============================================================================
 // 1. CLIENT-SIDE STATE
 // =============================================================================
-var state = {validator: null, list: [], idx: 0, year: 2017};
+// span  = plotted window in years (1 = just the target season; N adds N-1 extra
+//         years on each side). clicked = optional user-clicked comparison point.
+var state = {validator: null, list: [], idx: 0, year: 2017, span: 1,
+             aoi: null, clicked: null};
+var clickedLayer = null;   // ref to the clicked-point map layer (for removal)
 
 
 // =============================================================================
@@ -106,12 +112,24 @@ var yearSelect = ui.Select({
   style: {stretch: 'horizontal'}
 });
 
+// Plotted year-window (± años). Default '1' = only the target flowering season.
+var spanBox = ui.Textbox({
+  value: '1', onChange: setSpan,
+  style: {stretch: 'horizontal'}
+});
+
+var clearClickBtn = ui.Button({
+  label: '✖ Limpiar punto clickeado', onClick: clearClicked,
+  style: {stretch: 'horizontal'}
+});
+
 var statusLabel = ui.Label('', {color: 'gray', fontSize: '12px', margin: '2px 8px'});
 
 var help = ui.Label(
   'Evidencia PRIMARIA: alta resolución en Google Earth Pro (bloom amarillo Nov–Dic ' +
-  '= retama; abrí el <pxid>.kml). Los mosaicos y la serie HLS de acá son apoyo ' +
-  'fenológico. Cargá en tu planilla: class_2017/2025 (Retama/No_retama) y su ' +
+  '= retama; abrí el <pxid>.kml). Los mosaicos y la serie NDYI (Sentinel-2) de acá son apoyo ' +
+  'fenológico. Podés CLICKEAR el mapa para agregar la serie NDYI de otro punto ' +
+  '(comparación). Cargá en tu planilla: class_2017/2025 (Retama/No_retama) y su ' +
   'confianza 0–10 (0 = no se sabe).',
   {fontSize: '11px', color: '#444', margin: '8px 8px'}
 );
@@ -123,6 +141,8 @@ var controlPanel = ui.Panel({
     pxidBigLabel, progressLabel, navRow,
     ui.Label('Retomar / saltar:', {fontSize: '12px', margin: '6px 8px 0 8px'}), pxidBox,
     ui.Label('Año:', {fontSize: '12px', margin: '6px 8px 0 8px'}), yearSelect,
+    ui.Label('Años a graficar (± ventana):', {fontSize: '12px', margin: '6px 8px 0 8px'}), spanBox,
+    clearClickBtn,
     statusLabel, help
   ],
   style: {width: '300px', padding: '4px'}
@@ -135,13 +155,58 @@ map.setOptions('SATELLITE');
 map.setCenter(-71.5, -41.5, 8);   // Patagonia norte, before a point is chosen
 map.style().set('stretch', 'both');
 
+// Click anywhere → set a comparison point and add its NDYI series to the panel.
+map.onClick(function(coords) {
+  if (!state.validator) { statusLabel.setValue('Elegí tu nombre primero.'); return; }
+  state.clicked = ee.Geometry.Point([coords.lon, coords.lat]);
+  addClickedMarker();
+  refreshCharts();
+});
+
 
 // =============================================================================
-// 3. HLS NDYI TIME-SERIES CHART  (Aug YEAR → Mar YEAR+1, AOI mean)
+// 3. NDYI TIME-SERIES CHARTS  (Aug (YEAR-span+1) → Mar (YEAR+span), region mean)
 // =============================================================================
-function buildHlsChart(aoi, year, pxid) {
-  var START = ee.Date.fromYMD(year, 8, 1);
-  var END   = ee.Date.fromYMD(year + 1, 3, 31);
+// span=1 → just the target season (Aug YEAR → Mar YEAR+1). span=N adds N-1 extra
+// years on each side. region can be the validated 1 km AOI or a clicked point.
+function spanWindow(year, span) {
+  return {
+    START: ee.Date.fromYMD(year - (span - 1), 8, 1),
+    END:   ee.Date.fromYMD(year + span, 3, 31),
+    y0:    year - (span - 1),
+    y1:    year + span
+  };
+}
+
+// ── 3a. Sentinel-2 (S2_HARMONIZED → no 2022 offset jump) + Cloud Score+ ──────
+function buildS2Chart(region, year, span, label, colors) {
+  var w = spanWindow(year, span);
+
+  var csPlus = ee.ImageCollection('GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED');
+  var s2 = ee.ImageCollection('COPERNICUS/S2_HARMONIZED')
+    .filterBounds(region)
+    .filterDate(w.START, w.END)
+    .map(function(img) { return img.linkCollection(csPlus, ['cs']); })
+    .map(function(img) { return img.updateMask(img.select('cs').gte(0.6)); })
+    .map(function(img) {
+      return img.normalizedDifference(['B3', 'B2']).rename('NDYI')
+        .copyProperties(img, ['system:time_start']);
+    });
+
+  return ui.Chart.image.series({
+    imageCollection: s2.select('NDYI'),
+    region: region, reducer: ee.Reducer.mean(), scale: 10,
+    xProperty: 'system:time_start'
+  }).setOptions({
+    title: 'Sentinel-2 NDYI  Ago ' + w.y0 + '–Mar ' + w.y1 + '  (' + label + ')',
+    hAxis: {title: 'fecha'}, vAxis: {title: 'NDYI (media región)'},
+    pointSize: 4, lineWidth: 1, colors: colors || ['1f78b4']
+  });
+}
+
+// ── 3b. HLS (Landsat + Sentinel harmonised); NDYI is a ratio → no scaling ─────
+function buildHlsChart(region, year, span, label, colors) {
+  var w = spanWindow(year, span);
 
   var hlsMask = function(img) {
     var f = img.select('Fmask');
@@ -153,20 +218,47 @@ function buildHlsChart(aoi, year, pxid) {
       .copyProperties(img, ['system:time_start']);
   };
   var hlsL = ee.ImageCollection('NASA/HLS/HLSL30/v002')
-    .filterBounds(aoi).filterDate(START, END).select(['B2', 'B3', 'Fmask']).map(hlsNDYI);
+    .filterBounds(region).filterDate(w.START, w.END).select(['B2', 'B3', 'Fmask']).map(hlsNDYI);
   var hlsS = ee.ImageCollection('NASA/HLS/HLSS30/v002')
-    .filterBounds(aoi).filterDate(START, END).select(['B2', 'B3', 'Fmask']).map(hlsNDYI);
+    .filterBounds(region).filterDate(w.START, w.END).select(['B2', 'B3', 'Fmask']).map(hlsNDYI);
   var hls = hlsL.merge(hlsS).sort('system:time_start');
 
   return ui.Chart.image.series({
     imageCollection: hls.select('NDYI'),
-    region: aoi, reducer: ee.Reducer.mean(), scale: 30,
+    region: region, reducer: ee.Reducer.mean(), scale: 30,
     xProperty: 'system:time_start'
   }).setOptions({
-    title: 'HLS NDYI  Ago ' + year + '–Mar ' + (year + 1) + '  (' + pxid + ')',
-    hAxis: {title: 'fecha'}, vAxis: {title: 'NDYI (media AOI)'},
-    pointSize: 4, lineWidth: 1, colors: ['1b7837']
+    title: 'HLS NDYI  Ago ' + w.y0 + '–Mar ' + w.y1 + '  (' + label + ')',
+    hAxis: {title: 'fecha'}, vAxis: {title: 'NDYI (media región)'},
+    pointSize: 4, lineWidth: 1, colors: colors || ['1b7837']
   });
+}
+
+// ── 3c. (Re)build the chart panel: validated pixel + optional clicked point ──
+function refreshCharts() {
+  if (!state.validator || !state.aoi) return;
+  var pxid = state.list[state.idx];
+  var year = state.year, span = state.span;
+
+  chartPanel.clear();
+  chartPanel.add(ui.Label('Serie NDYI (apoyo fenológico)',
+                          {fontWeight: 'bold', fontSize: '13px', margin: '4px 8px'}));
+
+  // Validated pixel (1 km AOI mean) — blue.
+  chartPanel.add(ui.Label('▍Píxel validado: ' + pxid,
+                          {fontSize: '12px', color: '#1f78b4', margin: '4px 8px 0 8px'}));
+  chartPanel.add(buildS2Chart(state.aoi, year, span, pxid, ['1f78b4']));
+  // HLS del píxel validado (descomentar para prenderla — S2 y HLS pueden convivir):
+  // chartPanel.add(buildHlsChart(state.aoi, year, span, pxid, ['1b7837']));
+
+  // Optional clicked comparison point — magenta.
+  if (state.clicked) {
+    chartPanel.add(ui.Label('▍Punto clickeado (comparación)',
+                            {fontSize: '12px', color: '#e31a1c', margin: '10px 8px 0 8px'}));
+    chartPanel.add(buildS2Chart(state.clicked, year, span, 'click', ['e31a1c']));
+    // HLS del punto clickeado (descomentar si prendés la de arriba):
+    // chartPanel.add(buildHlsChart(state.clicked, year, span, 'click', ['b15928']));
+  }
 }
 
 
@@ -189,6 +281,7 @@ function render(recenter) {
   var contour = feat.geometry();
   var centro  = contour.centroid(1);
   var aoi     = centro.buffer(500).bounds();
+  state.aoi   = aoi;   // remembered so refreshCharts() can rebuild on span/click
 
   // Four mosaic layers from 01_MergedBands_<year> ------------------------------
   var merged = ee.Image(ASSET_PREFIX + '01_MergedBands_' + year).clip(aoi);
@@ -212,13 +305,21 @@ function render(recenter) {
   map.addLayer(merged.select('NDYI_feb'), NDYI_VIS, year + ' NDYI Feb', false);
   map.addLayer(pixHi, {palette: ['FF0000']}, 'pixel ' + pxid, true, 0.4);
   map.addLayer(centro, {color: '00FFFF'}, 'centroid', true);
+
+  // layers().reset() above dropped any clicked marker → re-add it if still set.
+  clickedLayer = null;
+  addClickedMarker();
+
   if (recenter) map.centerObject(contour, 18);
 
-  // HLS NDYI series ------------------------------------------------------------
-  chartPanel.clear();
-  chartPanel.add(ui.Label('Serie NDYI (apoyo fenológico)',
-                          {fontWeight: 'bold', fontSize: '13px', margin: '4px 8px'}));
-  chartPanel.add(buildHlsChart(aoi, year, pxid));
+  refreshCharts();
+}
+
+// Draw (or redraw) the user-clicked comparison point as a magenta marker.
+function addClickedMarker() {
+  if (!state.clicked) return;
+  if (clickedLayer) map.remove(clickedLayer);
+  clickedLayer = map.addLayer(state.clicked, {color: 'FF00FF'}, 'punto clickeado', true);
 }
 
 
@@ -238,6 +339,24 @@ function setValidator(name) {
 function setYear(y) {
   state.year = parseInt(y, 10);
   render(false);   // keep the map view fixed when comparing years
+}
+
+function setSpan(txt) {
+  var n = parseInt(txt, 10);
+  if (isNaN(n) || n < 1) {
+    statusLabel.setValue('⚠ Años a graficar: entero ≥ 1 (default 1).');
+    spanBox.setValue(String(state.span), false);
+    return;
+  }
+  state.span = n;
+  statusLabel.setValue('');
+  refreshCharts();   // only the charts depend on the window; no map re-render
+}
+
+function clearClicked() {
+  if (clickedLayer) { map.remove(clickedLayer); clickedLayer = null; }
+  state.clicked = null;
+  refreshCharts();
 }
 
 function step(d) {
