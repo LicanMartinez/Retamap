@@ -182,6 +182,11 @@ function spanWindow(year, span) {
 function buildS2Chart(region, year, span, label, colors) {
   var w = spanWindow(year, span);
 
+  // Snap the per-acquisition NDYI onto the 4326 mosaic grid — the grid the map
+  // classified on (01_MergedBands, exported scale:10 no crs). A Point sample then
+  // resolves the exact prediction pixel (native S2 is UTM19S → offset ~½ px).
+  var proj = ee.Image(ASSET_PREFIX + '01_MergedBands_' + year).select('B4').projection();
+
   var csPlus = ee.ImageCollection('GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED');
   var s2 = ee.ImageCollection('COPERNICUS/S2_HARMONIZED')
     .filterBounds(region)
@@ -190,6 +195,7 @@ function buildS2Chart(region, year, span, label, colors) {
     .map(function(img) { return img.updateMask(img.select('cs').gte(0.6)); })
     .map(function(img) {
       return img.normalizedDifference(['B3', 'B2']).rename('NDYI')
+        .reproject(proj)                                  // → prediction grid
         .copyProperties(img, ['system:time_start']);
     });
 
@@ -209,6 +215,9 @@ function buildS2Chart(region, year, span, label, colors) {
 function buildHlsChart(region, year, span, label, colors) {
   var w = spanWindow(year, span);
 
+  // Same prediction-grid snap as the S2 chart (HLS is 30 m native → upsampled).
+  var proj = ee.Image(ASSET_PREFIX + '01_MergedBands_' + year).select('B4').projection();
+
   var hlsMask = function(img) {
     var f = img.select('Fmask');
     var clear = f.bitwiseAnd(1 << 1).eq(0).and(f.bitwiseAnd(1 << 3).eq(0));
@@ -216,6 +225,7 @@ function buildHlsChart(region, year, span, label, colors) {
   };
   var hlsNDYI = function(img) {
     return hlsMask(img).normalizedDifference(['B3', 'B2']).rename('NDYI')
+      .reproject(proj)                                    // → prediction grid
       .copyProperties(img, ['system:time_start']);
   };
   var hlsL = ee.ImageCollection('NASA/HLS/HLSL30/v002')
@@ -284,21 +294,28 @@ function render(recenter) {
   var centro  = contour.centroid(1);
   var aoi     = centro.buffer(500).bounds();
   state.aoi    = aoi;      // 1 km box: map extent / clip only
-  state.centro = centro;   // target pixel: region for the validated NDYI chart
 
   // Four mosaic layers from 01_MergedBands_<year> ------------------------------
   var merged = ee.Image(ASSET_PREFIX + '01_MergedBands_' + year).clip(aoi);
-  var proj10 = merged.select('B4').projection();   // mosaic's native pixel grid
+  var proj10 = merged.select('B4').projection();   // 4326 prediction grid (the pixel the map classified)
 
-  // Target pixel highlighted as a RASTER on the mosaic's own grid, so it
-  // reprojects to the display exactly like the mosaic → no half-pixel drift.
-  // (The FC contour is a vector built on the UTM sampling grid, which does not
-  // coincide with the mosaic grid, hence the previous offset.) Blind: derived
-  // from centro + raw imagery only, never from m2017/m2025 or predictions.
+  // The FC centroid is a UTM19S pixel center (points sampled on EPSG:32719), which
+  // lands inside — but not centered in — the 4326 prediction pixel. Snap it to the
+  // center of that 4326 pixel so the dot, the red box, and the validated chart all
+  // resolve to the same prediction pixel.
+  var pc = ee.Image.pixelLonLat().reproject(proj10)
+    .reduceRegion({reducer: ee.Reducer.first(), geometry: centro, scale: 10});
+  centro = ee.Geometry.Point([pc.get('longitude'), pc.get('latitude')]);
+  state.centro = centro;   // 4326 prediction pixel center: region for the validated NDYI chart
+
+  // Target pixel highlighted as a RASTER on the 4326 prediction grid — the same
+  // grid the (snapped) centro, the dot, and the validated chart resolve to, so
+  // all three coincide with the pixel the map classified. Blind: derived from
+  // centro + raw imagery only, never from m2017/m2025 or predictions.
   var pixHi = ee.Image(0).byte()
     .paint(ee.FeatureCollection([ee.Feature(centro)]), 1)   // pixel under centro = 1
     .selfMask()
-    .reproject(proj10);                                     // snap to mosaic grid
+    .reproject(proj10);                                     // snap to prediction grid
 
   map.layers().reset();
   map.addLayer(aoi, {color: 'ffffff'}, '1km AOI', false);
