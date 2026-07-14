@@ -327,11 +327,44 @@ var samples = sampleStratum(1, nFinal.s1)
   .merge(sampleStratum(2, nFinal.s2))
   .merge(sampleStratum(3, nFinal.s3));
 
-// Append lon/lat (centroid coordinates) as plain columns for the R step.
+// Append lon/lat (UTM centroid coordinates, in 4326) as plain columns for the R.
 samples = samples.map(function(f) {
   var c = ee.List(f.geometry().transform('EPSG:4326', 1).coordinates());
   return f.set('lon', c.get(0), 'lat', c.get(1));
 });
+
+// -----------------------------------------------------------------------------
+// 8.5. GRID-A (4326 mosaic / prediction) pixel: exact center + pixel size
+// -----------------------------------------------------------------------------
+// The KMLs must outline the pixel the MAP classified, which lives on the 4326
+// grid of 01_MergedBands (exported scale:10, no crs) — NOT the UTM sampling
+// pixel. Snap each point to that grid's pixel center (lonA/latA) and carry the
+// grid's pixel size in degrees (dLon/dLat, constant) so the R draws the exact
+// lon/lat-aligned pixel rectangle. Same grid the App now highlights.
+var projA  = ee.Image(ASSET_PREFIX + '01_MergedBands_' + VAL_YEARS[0])
+               .select('B4').projection();
+var pixLLA = ee.Image.pixelLonLat().reproject(projA);   // each pixel = its center lon/lat
+samples = pixLLA.reduceRegions({
+  collection: samples,
+  reducer   : ee.Reducer.first(),
+  scale     : 10,
+  crs       : projA
+}).map(function(f) {
+  return f.set('lonA', f.get('longitude'), 'latA', f.get('latitude'));
+});
+
+// Pixel size in degrees from the grid-A affine transform (constant for all pts).
+var infoA = projA.getInfo();               // {crs, transform:[dLon,0,x0,0,-dLat,y0]}
+var dLonA = infoA.transform[0];
+var dLatA = -infoA.transform[4];
+samples = samples.map(function(f) { return f.set('dLon', dLonA, 'dLat', dLatA); });
+
+// Verify the second validated year shares the same grid (one KML serves both).
+var projA2 = ee.Image(ASSET_PREFIX + '01_MergedBands_' + VAL_YEARS[1])
+               .select('B4').projection();
+print('Grid-A transform ' + VAL_YEARS[0] + ':', infoA.transform);
+print('Grid-A transform ' + VAL_YEARS[1] + ':', projA2.getInfo().transform,
+      '(debe coincidir con ' + VAL_YEARS[0] + ' → un KML sirve para ambos años)');
 
 print('Desired n per stratum:', nFinal);
 print('Actual n per stratum after min-distance filter:',
@@ -370,6 +403,7 @@ if (EXPORT_TO_DRIVE) {
     folder        : DRIVE_FOLDER,
     fileNamePrefix: '09v_valPoints_raw' + RUN_SUFFIX,
     fileFormat    : 'CSV',
-    selectors     : ['stratum', 'm2017', 'm2025', 'lon', 'lat']
+    selectors     : ['stratum', 'm2017', 'm2025', 'lon', 'lat',
+                     'lonA', 'latA', 'dLon', 'dLat']
   });
 }

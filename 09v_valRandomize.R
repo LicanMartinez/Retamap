@@ -15,8 +15,11 @@
 #                                  straight into a Google Sheet). Columns to fill:
 #                                  class_2017, class_2017_confidence,
 #                                  class_2025, class_2025_confidence.
-#   4. kml/<validator>/<pxid>.kml — per-point KML (centroid + 10 m contour) for
-#                                  Google Earth Pro historical imagery.
+#   4. kml/<validator>/<pxid>.kml — per-point KML: exact center + lon/lat-aligned
+#                                  border of the 4326 PREDICTION pixel (grid A,
+#                                  lonA/latA + dLon/dLat from the generator), i.e.
+#                                  the pixel the map classified. For Google Earth
+#                                  Pro historical imagery.
 #   5. ../09v_valAssign.js        — GEE module (exports.ASSIGN = per-validator
 #                                  ordered pxid list, matching each sheet's row
 #                                  order). Consumed by 09v_valApp.js via require().
@@ -56,11 +59,13 @@ UTM_EPSG   <- 32719                         # UTM 19S
 # =============================================================================
 stopifnot(file.exists(INPUT_CSV))
 raw <- read.csv(INPUT_CSV, stringsAsFactors = FALSE)
-# Expected columns: stratum, m2017, m2025, lon, lat (+ possibly system:index/.geo)
-need <- c("stratum", "lon", "lat")
-stopifnot(all(need %in% names(raw)))
+# Expected columns: stratum, m2017, m2025, lon, lat (UTM centroid, in 4326) +
+# lonA, latA, dLon, dLat (grid-A / 4326 prediction pixel — for the KMLs).
+need <- c("stratum", "lon", "lat", "lonA", "latA", "dLon", "dLat")
+stopifnot(all(need %in% names(raw)))   # re-run 09v_valGenerator.js if lonA.. missing
 for (cc in c("m2017", "m2025")) if (!cc %in% names(raw)) raw[[cc]] <- NA
-raw <- raw[, c("stratum", "m2017", "m2025", "lon", "lat")]
+raw <- raw[, c("stratum", "m2017", "m2025", "lon", "lat",
+               "lonA", "latA", "dLon", "dLat")]
 cat(sprintf("Read %d points (S1=%d, S2=%d, S3=%d)\n",
             nrow(raw), sum(raw$stratum == 1), sum(raw$stratum == 2), sum(raw$stratum == 3)))
 
@@ -142,15 +147,16 @@ for (v in VALIDATORS) {
               sep = "\t", row.names = FALSE, quote = FALSE, na = "")
 }
 
-# 5d. Per-point KML (centroid + contour) in each assigned validator's folder ---
-ring_all <- st_coordinates(contour_4326)   # cols X,Y,...,L2 (feature index)
-fid_col  <- ncol(ring_all)                 # last col = feature id (L2)
+# 5d. Per-point KML in each assigned validator's folder -----------------------
+# Center + border are the EXACT 4326 prediction pixel (grid A): center = lonA/latA,
+# border = lon/lat-aligned rectangle lonA±dLon/2, latA±dLat/2 (dLon/dLat = grid-A
+# pixel size in degrees, from the generator). Matches the App's dot + red box.
 make_kml <- function(pxid, cx, cy, ring) {
   cs <- paste(apply(ring, 1, function(r) paste0(r[1], ",", r[2], ",0")), collapse = " ")
   paste0(
     '<?xml version="1.0" encoding="UTF-8"?>\n',
     '<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>', pxid, '</name>\n',
-    '<Placemark><name>', pxid, ' centroid</name>',
+    '<Placemark><name>', pxid, ' center</name>',
     '<Point><coordinates>', cx, ',', cy, ',0</coordinates></Point></Placemark>\n',
     '<Placemark><name>', pxid, ' pixel</name>',
     '<Style><LineStyle><color>ff0000ff</color><width>2</width></LineStyle>',
@@ -159,10 +165,19 @@ make_kml <- function(pxid, cx, cy, ring) {
     '</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>\n',
     '</Document></kml>')
 }
+
+# Axis-aligned (lon/lat) rectangle of the grid-A pixel around (lonA, latA).
+gridA_ring <- function(lonA, latA, dLon, dLat) {
+  hx <- dLon / 2; hy <- dLat / 2
+  matrix(c(lonA - hx, latA - hy,   lonA + hx, latA - hy,
+           lonA + hx, latA + hy,   lonA - hx, latA + hy,
+           lonA - hx, latA - hy), ncol = 2, byrow = TRUE)
+}
+
 for (v in VALIDATORS) dir.create(file.path(WORK_DIR, "kml", v), showWarnings = FALSE)
 for (i in seq_len(nrow(raw))) {
-  ring <- ring_all[ring_all[, fid_col] == i, c("X", "Y"), drop = FALSE]
-  kml  <- make_kml(raw$pxid[i], raw$lon[i], raw$lat[i], ring)
+  ring <- gridA_ring(raw$lonA[i], raw$latA[i], raw$dLon[i], raw$dLat[i])
+  kml  <- make_kml(raw$pxid[i], raw$lonA[i], raw$latA[i], ring)
   for (v in strsplit(raw$validators[i], ";")[[1]]) {
     writeLines(kml, file.path(WORK_DIR, "kml", v, paste0(raw$pxid[i], ".kml")))
   }
