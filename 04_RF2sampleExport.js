@@ -179,7 +179,7 @@ var compBackgroundPolys =
 /***** End of imports. If edited, may not auto-convert in the playground. *****/
 // =============================================================================
 // 04: RF2 — Stratified sampling from stable regions + Complementary samples
-//          + Train/Val split for holdout validation
+//          + Train/Val split
 // =============================================================================
 // Strategy:
 //   1. bounds() on region: eliminates point-in-polygon over 14k vertices
@@ -288,7 +288,7 @@ if (USE_COMPLEMENTARY) {
 // -----------------------------------------------------------------------------
 // Split happens BEFORE spectral extraction so the same spatial points are used
 // consistently across all 9 years. Each year produces two exports: _train and
-// _val. Script 05 uses only _train; script 09 uses _val for holdout evaluation.
+// _val. Script 05 trains on _train only.
 // =============================================================================
 samplePoints = samplePoints.randomColumn('rand', RANDOM_SEED);
 var trainPoints = samplePoints.filter(ee.Filter.gte('rand', VAL_FRACTION));

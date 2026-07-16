@@ -7,7 +7,7 @@
 // Exporting the trained classifier as an asset means the downstream prediction
 // script (06_RF2predict.js) loads it with ee.Classifier.load() instead of
 // re-training. Each export task in 06 pays only the cost of classification.
-// Validation (holdout) is handled in 09_holdoutValidation.js using _val assets.
+// Accuracy is assessed separately by the independent validation family (09v).
 // =============================================================================
 
 // =============================================================================
@@ -33,7 +33,7 @@ var samples_rf2 = ee.FeatureCollection(
 print('Class counts (stable_label):', samples_rf2.aggregate_histogram('stable_label'));
 
 // =============================================================================
-// 2. TRAIN RF2 (train samples only — holdout validation in 09_holdoutValidation.js)
+// 2. TRAIN RF2 (train samples only)
 // =============================================================================
 print('Train samples:', samples_rf2.size());
 

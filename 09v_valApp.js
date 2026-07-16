@@ -308,14 +308,22 @@ function render(recenter) {
   centro = ee.Geometry.Point([pc.get('longitude'), pc.get('latitude')]);
   state.centro = centro;   // 4326 prediction pixel center: region for the validated NDYI chart
 
-  // Target pixel highlighted as a RASTER on the 4326 prediction grid — the same
+  // Target pixel outlined as a VECTOR on the 4326 prediction grid — the same
   // grid the (snapped) centro, the dot, and the validated chart resolve to, so
-  // all three coincide with the pixel the map classified. Blind: derived from
+  // all coincide with the pixel the map classified. Blind: derived from
   // centro + raw imagery only, never from m2017/m2025 or predictions.
-  var pixHi = ee.Image(0).byte()
+  // The pixel under centro is rasterized on the prediction grid, then vectorized
+  // to recover its exact square boundary, and painted as an outline (no fill).
+  var pixRas = ee.Image(0).byte()
     .paint(ee.FeatureCollection([ee.Feature(centro)]), 1)   // pixel under centro = 1
     .selfMask()
     .reproject(proj10);                                     // snap to prediction grid
+  var pixVec = pixRas.reduceToVectors({
+    geometry: aoi, scale: 10, crs: proj10,
+    geometryType: 'polygon', eightConnected: false, maxPixels: 1e8
+  });
+  var pixHi = ee.Image().byte()
+    .paint({featureCollection: pixVec, color: 1, width: 2});  // outline only
 
   map.layers().reset();
   map.addLayer(aoi, {color: 'ffffff'}, '1km AOI', false);
@@ -323,7 +331,7 @@ function render(recenter) {
   map.addLayer(merged.select('NDYI'), NDYI_VIS, year + ' NDYI NovDec', false);
   map.addLayer(merged, visTC_feb, year + ' TrueColor Feb', false);
   map.addLayer(merged.select('NDYI_feb'), NDYI_VIS, year + ' NDYI Feb', false);
-  map.addLayer(pixHi, {palette: ['FF0000']}, 'pixel ' + pxid, true, 0.4);
+  map.addLayer(pixHi, {palette: ['FF0000']}, 'pixel ' + pxid, true);
   map.addLayer(centro, {color: '00FFFF'}, 'centroid', true);
 
   // layers().reset() above dropped any clicked marker → re-add it if still set.
