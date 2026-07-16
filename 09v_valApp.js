@@ -51,6 +51,7 @@ var SHEET_URLS = {
 // Shared visualization params (identical to 09v_valInspector_TEMPLATE.js).
 // var NDYI_VIS = {min: 0, max: 0.2, palette: ['ffffff', 'ffff66', 'ff9900', 'cc3300']};
 // var NDYI_VIS = {min: 0, max: 0.2, palette: ['000000', '990000', 'ff9900', 'ffff66']};
+// var NDYI_VIS = {min: 0, max: 0.2, palette: ['000000', '990000', 'ff9900', 'ffff66']};
 var NDYI_VIS = {min: 0, max: 0.2, palette: ['000000', '990000', 'ff9900', 'ffff66']};
 var visTC = {
   bands: ['B4', 'B3', 'B2'],
@@ -68,7 +69,7 @@ var fc = ee.FeatureCollection(FC_ASSET);
 // =============================================================================
 // span  = plotted window in years (1 = just the target season; N adds N-1 extra
 //         years on each side). clicked = optional user-clicked comparison point.
-var state = {validator: null, list: [], idx: 0, year: 2017, span: 1,
+var state = {validator: null, list: [], idx: 0, year: 2017, span: 2,
              aoi: null, centro: null, clicked: null};
 var clickedLayer = null;   // ref to the clicked-point map layer (for removal)
 
@@ -114,7 +115,7 @@ var yearSelect = ui.Select({
 
 // Plotted year-window (± años). Default '1' = only the target flowering season.
 var spanBox = ui.Textbox({
-  value: '1', onChange: setSpan,
+  value: '2', onChange: setSpan,
   style: {stretch: 'horizontal'}
 });
 
@@ -205,7 +206,7 @@ function buildS2Chart(region, year, span, label, colors) {
     xProperty: 'system:time_start'
   }).setOptions({
     title: 'Sentinel-2 NDYI  Ago ' + w.y0 + '–Mar ' + w.y1 + '  (' + label + ')',
-    hAxis: {title: 'fecha'},
+    hAxis: {title: 'fecha'}, 
     vAxis: {title: 'NDYI (media región)', viewWindow: {min: -0.3, max: 0.5}},
     pointSize: 4, lineWidth: 1, colors: colors || ['1f78b4']
   });
@@ -308,22 +309,14 @@ function render(recenter) {
   centro = ee.Geometry.Point([pc.get('longitude'), pc.get('latitude')]);
   state.centro = centro;   // 4326 prediction pixel center: region for the validated NDYI chart
 
-  // Target pixel outlined as a VECTOR on the 4326 prediction grid — the same
+  // Target pixel highlighted as a RASTER on the 4326 prediction grid — the same
   // grid the (snapped) centro, the dot, and the validated chart resolve to, so
-  // all coincide with the pixel the map classified. Blind: derived from
+  // all three coincide with the pixel the map classified. Blind: derived from
   // centro + raw imagery only, never from m2017/m2025 or predictions.
-  // The pixel under centro is rasterized on the prediction grid, then vectorized
-  // to recover its exact square boundary, and painted as an outline (no fill).
-  var pixRas = ee.Image(0).byte()
+  var pixHi = ee.Image(0).byte()
     .paint(ee.FeatureCollection([ee.Feature(centro)]), 1)   // pixel under centro = 1
     .selfMask()
     .reproject(proj10);                                     // snap to prediction grid
-  var pixVec = pixRas.reduceToVectors({
-    geometry: aoi, scale: 10, crs: proj10,
-    geometryType: 'polygon', eightConnected: false, maxPixels: 1e8
-  });
-  var pixHi = ee.Image().byte()
-    .paint({featureCollection: pixVec, color: 1, width: 2});  // outline only
 
   map.layers().reset();
   map.addLayer(aoi, {color: 'ffffff'}, '1km AOI', false);
@@ -331,7 +324,7 @@ function render(recenter) {
   map.addLayer(merged.select('NDYI'), NDYI_VIS, year + ' NDYI NovDec', false);
   map.addLayer(merged, visTC_feb, year + ' TrueColor Feb', false);
   map.addLayer(merged.select('NDYI_feb'), NDYI_VIS, year + ' NDYI Feb', false);
-  map.addLayer(pixHi, {palette: ['FF0000']}, 'pixel ' + pxid, true);
+  map.addLayer(pixHi, {palette: ['FF0000']}, 'pixel ' + pxid, false, 0.4);
   map.addLayer(centro, {color: '00FFFF'}, 'centroid', true);
 
   // layers().reset() above dropped any clicked marker → re-add it if still set.
@@ -350,6 +343,50 @@ function addClickedMarker() {
   clickedLayer = map.addLayer(state.clicked, {color: 'FF00FF'}, 'punto clickeado', true);
 }
 
+// =============================================================================
+// LEYENDA NDYI (Flotante sobre el mapa)
+// =============================================================================
+var legendTitle = ui.Label('Escala NDYI', {
+  fontWeight: 'bold',
+  fontSize: '11px',
+  margin: '4px 8px 2px 8px',
+  backgroundColor: 'rgba(0,0,0,0)'
+});
+
+var colorBar = ui.Thumbnail({
+  image: ee.Image.pixelLonLat().select('longitude'),
+  params: {
+    bbox: [0, 0, 100, 10],
+    dimensions: '180x15',
+    format: 'png',
+    min: 0,
+    max: 100,
+    palette: NDYI_VIS.palette
+  },
+  style: {margin: '0px 8px', maxHeight: '15px', backgroundColor: 'rgba(0,0,0,0)'}
+});
+
+var legendLabels = ui.Panel({
+  widgets: [
+    ui.Label(NDYI_VIS.min, {margin: '2px 8px', fontSize: '10px', backgroundColor: 'rgba(0,0,0,0)'}),
+    ui.Label((NDYI_VIS.min + NDYI_VIS.max) / 2, {margin: '2px 8px', textAlign: 'center', stretch: 'horizontal', fontSize: '10px', backgroundColor: 'rgba(0,0,0,0)'}),
+    ui.Label(NDYI_VIS.max, {margin: '2px 8px', fontSize: '10px', backgroundColor: 'rgba(0,0,0,0)'})
+  ],
+  layout: ui.Panel.Layout.flow('horizontal'),
+  style: {stretch: 'horizontal', backgroundColor: 'rgba(0,0,0,0)'}
+});
+
+var legendPanel = ui.Panel({
+  widgets: [legendTitle, colorBar, legendLabels],
+  style: {
+    position: 'bottom-left',
+    padding: '4px',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    border: '1px solid #ccc'
+  }
+});
+
+map.add(legendPanel);
 
 // =============================================================================
 // 5. CONTROL CALLBACKS
