@@ -53,6 +53,11 @@ var SHEET_URLS = {
 // var NDYI_VIS = {min: 0, max: 0.2, palette: ['000000', '990000', 'ff9900', 'ffff66']};
 // var NDYI_VIS = {min: 0, max: 0.2, palette: ['000000', '990000', 'ff9900', 'ffff66']};
 var NDYI_VIS = {min: 0, max: 0.2, palette: ['000000', '990000', 'ff9900', 'ffff66']};
+// NDVI: brown→green vigor ramp, deliberately distinct from the NDYI palette above
+// so the two indices are never confused when both layers are toggled on.
+var NDVI_VIS = {min: 0, max: 0.6, palette: [
+  'ce7e45', 'df923d', 'f1b555', 'fcd163', '99b718', '74a901', '3e8601', '056201', '004c00'
+]};
 var visTC = {
   bands: ['B4', 'B3', 'B2'],
   min: [300, 300, 500],   // higher 3rd value tames the blue haze / shadows
@@ -246,7 +251,73 @@ function buildHlsChart(region, year, span, label, colors) {
   });
 }
 
-// ── 3c. (Re)build the chart panel: validated pixel + optional clicked point ──
+// ── 3c. Sentinel-2 NDVI (structural/vigor support, complements NDYI bloom) ────
+function buildS2ChartNDVI(region, year, span, label, colors) {
+  var w = spanWindow(year, span);
+
+  // Same prediction-grid snap as the NDYI chart (see buildS2Chart above).
+  var proj = ee.Image(ASSET_PREFIX + '01_MergedBands_' + year).select('B4').projection();
+
+  var csPlus = ee.ImageCollection('GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED');
+  var s2 = ee.ImageCollection('COPERNICUS/S2_HARMONIZED')
+    .filterBounds(region)
+    .filterDate(w.START, w.END)
+    .map(function(img) { return img.linkCollection(csPlus, ['cs']); })
+    .map(function(img) { return img.updateMask(img.select('cs').gte(0.6)); })
+    .map(function(img) {
+      return img.normalizedDifference(['B8', 'B4']).rename('NDVI')
+        .reproject(proj)                                  // → prediction grid
+        .copyProperties(img, ['system:time_start']);
+    });
+
+  return ui.Chart.image.series({
+    imageCollection: s2.select('NDVI'),
+    region: region, reducer: ee.Reducer.mean(), scale: 10,
+    xProperty: 'system:time_start'
+  }).setOptions({
+    title: 'Sentinel-2 NDVI  Ago ' + w.y0 + '–Mar ' + w.y1 + '  (' + label + ')',
+    hAxis: {title: 'fecha'},
+    vAxis: {title: 'NDVI (media región)', viewWindow: {min: -0.2, max: 0.9}},
+    pointSize: 4, lineWidth: 1, colors: colors || ['1f78b4']
+  });
+}
+
+// ── 3d. HLS NDVI — kept ready, wired off by default (see buildHlsChart) ──────
+function buildHlsChartNDVI(region, year, span, label, colors) {
+  var w = spanWindow(year, span);
+
+  var proj = ee.Image(ASSET_PREFIX + '01_MergedBands_' + year).select('B4').projection();
+
+  var hlsMask = function(img) {
+    var f = img.select('Fmask');
+    var clear = f.bitwiseAnd(1 << 1).eq(0).and(f.bitwiseAnd(1 << 3).eq(0));
+    return img.updateMask(clear);
+  };
+  // HLS common band naming: B5 = NIR (OLI B5 / MSI B8A), B4 = Red — shared by
+  // both HLSL30 and HLSS30, same idea as B2/B3 in buildHlsChart above.
+  var hlsNDVI = function(img) {
+    return hlsMask(img).normalizedDifference(['B5', 'B4']).rename('NDVI')
+      .reproject(proj)                                    // → prediction grid
+      .copyProperties(img, ['system:time_start']);
+  };
+  var hlsL = ee.ImageCollection('NASA/HLS/HLSL30/v002')
+    .filterBounds(region).filterDate(w.START, w.END).select(['B4', 'B5', 'Fmask']).map(hlsNDVI);
+  var hlsS = ee.ImageCollection('NASA/HLS/HLSS30/v002')
+    .filterBounds(region).filterDate(w.START, w.END).select(['B4', 'B5', 'Fmask']).map(hlsNDVI);
+  var hls = hlsL.merge(hlsS).sort('system:time_start');
+
+  return ui.Chart.image.series({
+    imageCollection: hls.select('NDVI'),
+    region: region, reducer: ee.Reducer.mean(), scale: 30,
+    xProperty: 'system:time_start'
+  }).setOptions({
+    title: 'HLS NDVI  Ago ' + w.y0 + '–Mar ' + w.y1 + '  (' + label + ')',
+    hAxis: {title: 'fecha'}, vAxis: {title: 'NDVI (media región)'},
+    pointSize: 4, lineWidth: 1, colors: colors || ['1b7837']
+  });
+}
+
+// ── 3e. (Re)build the chart panel: validated pixel + optional clicked point ──
 function refreshCharts() {
   if (!state.validator || !state.centro) return;
   var pxid = state.list[state.idx];
@@ -271,6 +342,24 @@ function refreshCharts() {
     chartPanel.add(buildS2Chart(state.clicked, year, span, 'click', ['e31a1c']));
     // HLS del punto clickeado (descomentar si prendés la de arriba):
     // chartPanel.add(buildHlsChart(state.clicked, year, span, 'click', ['b15928']));
+  }
+
+  // NDVI (apoyo estructural: biomasa/vigor, complementa la floración del NDYI) ──
+  chartPanel.add(ui.Label('Serie NDVI (apoyo estructural)',
+                          {fontWeight: 'bold', fontSize: '13px', margin: '14px 8px 4px 8px'}));
+
+  chartPanel.add(ui.Label('▍Píxel validado: ' + pxid,
+                          {fontSize: '12px', color: '#1f78b4', margin: '4px 8px 0 8px'}));
+  chartPanel.add(buildS2ChartNDVI(state.centro, year, span, pxid, ['1f78b4']));
+  // HLS del píxel validado (descomentar para prenderla):
+  // chartPanel.add(buildHlsChartNDVI(state.centro, year, span, pxid, ['1b7837']));
+
+  if (state.clicked) {
+    chartPanel.add(ui.Label('▍Punto clickeado (comparación)',
+                            {fontSize: '12px', color: '#e31a1c', margin: '10px 8px 0 8px'}));
+    chartPanel.add(buildS2ChartNDVI(state.clicked, year, span, 'click', ['e31a1c']));
+    // HLS del punto clickeado (descomentar si prendés la de arriba):
+    // chartPanel.add(buildHlsChartNDVI(state.clicked, year, span, 'click', ['b15928']));
   }
 }
 
@@ -300,6 +389,11 @@ function render(recenter) {
   var merged = ee.Image(ASSET_PREFIX + '01_MergedBands_' + year).clip(aoi);
   var proj10 = merged.select('B4').projection();   // 4326 prediction grid (the pixel the map classified)
 
+  // NDVI is not precomputed in 01_MergedBands (only NDYI is) — derive it on the
+  // fly from the same reflectance bands, one per period, like NDYI_feb already does.
+  var ndviNovDec = merged.normalizedDifference(['B8', 'B4']).rename('NDVI');
+  var ndviFeb    = merged.normalizedDifference(['B8_feb', 'B4_feb']).rename('NDVI_feb');
+
   // The FC centroid is a UTM19S pixel center (points sampled on EPSG:32719), which
   // lands inside — but not centered in — the 4326 prediction pixel. Snap it to the
   // center of that 4326 pixel so the dot, the red box, and the validated chart all
@@ -322,8 +416,10 @@ function render(recenter) {
   map.addLayer(aoi, {color: 'ffffff'}, '1km AOI', false);
   map.addLayer(merged, visTC, year + ' TrueColor NovDec', true);
   map.addLayer(merged.select('NDYI'), NDYI_VIS, year + ' NDYI NovDec', false);
+  map.addLayer(ndviNovDec, NDVI_VIS, year + ' NDVI NovDec', false);
   map.addLayer(merged, visTC_feb, year + ' TrueColor Feb', false);
   map.addLayer(merged.select('NDYI_feb'), NDYI_VIS, year + ' NDYI Feb', false);
+  map.addLayer(ndviFeb, NDVI_VIS, year + ' NDVI Feb', false);
   map.addLayer(pixHi, {palette: ['FF0000']}, 'pixel ' + pxid, false, 0.4);
   map.addLayer(centro, {color: '00FFFF'}, 'centroid', true);
 
@@ -387,6 +483,51 @@ var legendPanel = ui.Panel({
 });
 
 map.add(legendPanel);
+
+// =============================================================================
+// LEYENDA NDVI (Flotante sobre el mapa, esquina opuesta a la de NDYI)
+// =============================================================================
+var legendTitleNDVI = ui.Label('Escala NDVI', {
+  fontWeight: 'bold',
+  fontSize: '11px',
+  margin: '4px 8px 2px 8px',
+  backgroundColor: 'rgba(0,0,0,0)'
+});
+
+var colorBarNDVI = ui.Thumbnail({
+  image: ee.Image.pixelLonLat().select('longitude'),
+  params: {
+    bbox: [0, 0, 100, 10],
+    dimensions: '180x15',
+    format: 'png',
+    min: 0,
+    max: 100,
+    palette: NDVI_VIS.palette
+  },
+  style: {margin: '0px 8px', maxHeight: '15px', backgroundColor: 'rgba(0,0,0,0)'}
+});
+
+var legendLabelsNDVI = ui.Panel({
+  widgets: [
+    ui.Label(NDVI_VIS.min, {margin: '2px 8px', fontSize: '10px', backgroundColor: 'rgba(0,0,0,0)'}),
+    ui.Label((NDVI_VIS.min + NDVI_VIS.max) / 2, {margin: '2px 8px', textAlign: 'center', stretch: 'horizontal', fontSize: '10px', backgroundColor: 'rgba(0,0,0,0)'}),
+    ui.Label(NDVI_VIS.max, {margin: '2px 8px', fontSize: '10px', backgroundColor: 'rgba(0,0,0,0)'})
+  ],
+  layout: ui.Panel.Layout.flow('horizontal'),
+  style: {stretch: 'horizontal', backgroundColor: 'rgba(0,0,0,0)'}
+});
+
+var legendPanelNDVI = ui.Panel({
+  widgets: [legendTitleNDVI, colorBarNDVI, legendLabelsNDVI],
+  style: {
+    position: 'bottom-right',
+    padding: '4px',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    border: '1px solid #ccc'
+  }
+});
+
+map.add(legendPanelNDVI);
 
 // =============================================================================
 // 5. CONTROL CALLBACKS
