@@ -16,10 +16,7 @@ samples** derived from the multi-year RF1 series.
 > 1000.
 
 ## Citation
-
-
-
-If you use this code, please cite the paper above.
+...
 
 ## Pipeline overview
 
