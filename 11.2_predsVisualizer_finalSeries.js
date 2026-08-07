@@ -44,13 +44,5 @@ years.forEach(function(year) {
 
 
 // =============================================================================
-// Print validation points
-// =============================================================================
-var valPoints = ee.FeatureCollection(ASSET_PREFIX + '4-Validation_points_complete_2023');
 
-var ctrlPoints   = valPoints.filter(ee.Filter.eq('TIPO', 'ctrl'));
-var retamaPoints = valPoints.filter(ee.Filter.eq('TIPO', 'retama'));
-
-Map.addLayer(ctrlPoints,   {color: 'darkgreen'}, 'Puntos Ctrl', false);
-Map.addLayer(retamaPoints, {color: 'gold'},      'Puntos Retama', false);
 Map.setOptions('SATELLITE');

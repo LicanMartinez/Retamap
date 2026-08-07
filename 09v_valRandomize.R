@@ -44,7 +44,7 @@ suppressPackageStartupMessages(library(sf))
 RUN_SUFFIX <- "_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k"
 
 PROJECT_DIR <- "D:/Lican/uni/Investigacion/Colaboraciones_y_ayudas/Retamap"
-WORK_DIR    <- file.path(PROJECT_DIR, "gee_scripts", "validation_independent")
+WORK_DIR    <- file.path(PROJECT_DIR, "gee_scripts", "validation")
 
 # Place the Drive-downloaded raw CSV here (default name from the generator):
 INPUT_CSV <- file.path(WORK_DIR, paste0("09v_valPoints_raw", RUN_SUFFIX, ".csv"))

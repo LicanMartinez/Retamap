@@ -1,0 +1,386 @@
+---
+title: "Validación independiente del mapa de retama (familia 09v)"
+subtitle: "Primera bajada de datos y métricas — 2017 y 2025"
+date: "`r format(Sys.Date())`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    df_print: kable
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+# PASS-1 engine: computes everything, exports tables/figures/digest.
+# Sourcing it here recomputes the same objects for inline tables/figures.
+source(file.path("D:/Lican/uni/Investigacion/Colaboraciones_y_ayudas/Retamap",
+                 "gee_scripts", "09v_valAnalysis_compute.R"))
+library(knitr)
+pct  <- function(x) ifelse(is.na(x), "\u2014", sprintf("%.1f%%", 100 * as.numeric(x)))
+num3 <- function(x) ifelse(is.na(x), "\u2014", formatC(as.numeric(x), format = "f", digits = 3))
+```
+
+# Resumen ejecutivo
+
+Este reporte es la **primera bajada** de las tres planillas de foto-interpretación
+(`Registro_validacion_{Lican,Sofi,Jaime}`) y el **primer cálculo** de las métricas de
+validación del mapa final `08_RF2_prediction`, para **`r paste(YEARS, collapse=" y ")`**.
+
+> **Convención (vale para todo el reporte, no solo desde acá):** el **valor de referencia**
+> ("valor real") es siempre el que asignan **los validadores** por foto-interpretación; el
+> **mapa** (`08_RF2_prediction`) es siempre **lo que se está evaluando**. Cuando mapa y
+> referencia difieren, el error se le atribuye al mapa, nunca a la referencia — así está
+> definido en el cómputo de comisión/omisión (`§4`), no solo en el texto.
+
+El mapa se evalúa contra la referencia siguiendo un muestreo estratificado por el propio mapa
+(S1 = mapa-retama, S2 = fondo cercano, S3 = fondo lejano), en la línea de Olofsson et al. (2014).
+
+```{r exec-numbers}
+oa17 <- metrics_uw_df$OA[metrics_uw_df$year == 2017]
+oa25 <- metrics_uw_df$OA[metrics_uw_df$year == 2025]
+```
+
+- **Exactitud global (cruda):** `r pct(oa17)` en 2017 y `r pct(oa25)` en 2025.
+- **Retama** — comisión (sobre-detección) ~`r pct(metrics_uw_df$CE_retama[1])`/`r pct(metrics_uw_df$CE_retama[2])`
+  y omisión (retama no detectada) ~`r pct(metrics_uw_df$OE_retama[1])`/`r pct(metrics_uw_df$OE_retama[2])`
+  (2017/2025).
+- **No-retama lejano (S3):** comisión = **0%** en ambos años en la muestra — respalda el
+  supuesto de diseño de que fuera del entorno de la retama el mapa prácticamente no confunde.
+- **Concordancia inter-observador (kappa):** `r num3(kappa_df$kappa[1])` (2017) y
+  `r num3(kappa_df$kappa[2])` (2025) sobre los puntos con doble validación.
+
+> **Provisorio.** La carga de validación está incompleta (Lican y Jaime a mitad de camino;
+> los ~100 puntos recién transferidos a Sofi todavía no bajados) y las métricas son **crudas**
+> (sin ponderar por área). El estimador de Olofsson ponderado se activa al cargar los pesos
+> Wᵢ (ver §6). Interpretar como una foto preliminar, no como los números finales del paper.
+
+# Datos y método
+
+```{r data-summary}
+data.frame(
+  Validador = VALIDATORS,
+  `Filas cargadas` = sapply(VALIDATORS, function(v) sum(sheets$validator == v)),
+  check.names = FALSE
+) |> kable(caption = "Filas con clase cargada por validador (estado de la bajada).")
+```
+
+- **Puntos del muestreo (master key):** `r nrow(mk)` (S1 = `r sum(mk$stratum==1)`,
+  S2 = `r sum(mk$stratum==2)`, S3 = `r sum(mk$stratum==3)`). Puntos con **doble validación**
+  (estrato S1, pares): `r length(pair_pxids)`.
+- **Etiqueta de referencia por (pxid, año):** validador único → su clase; par → consenso si
+  coinciden, se **descarta** ese año si difieren; `confianza = 0` (no determinable) → se excluye.
+  Los puntos de **un solo validador** (S2/S3 por diseño, o un par todavía a medio cargar) entran
+  igual en todas las métricas de este reporte — matriz de confusión, near/far, Olofsson y las dos
+  figuras de la §5 (con su banda marginal) — no solo los que tienen doble validación.
+- **Etiqueta del mapa por año:** `m2017`/`m2025` del master key (0 = no-retama, 1 = retama).
+- **near / far:** para el desglose del error de no-retama, *near* = S2 (+ S1 en su año
+  "apagado", es decir píxeles mapa-retama que ese año son no-retama), *far* = S3.
+
+```{r qc-table}
+qc_show <- qc_df[, c("year", "n_usable", "n_disagree", "n_single_design",
+                     "n_single_partial", "n_conf0_excluded")]
+names(qc_show) <- c("Año", "N usable (entra en las métricas)", "Desacuerdos descartados",
+                    "Un validador (por diseño, S2/S3)", "Un validador (par sin completar)",
+                    "Excluidos por conf=0")
+kable(qc_show, caption = "Control de calidad por año. \"N usable\" = puntos que entran en la matriz de confusión y las figuras (doble validación con acuerdo + validación única); no incluye los descartados por desacuerdo ni por conf=0.")
+```
+
+<!-- AGENT_INTERP:data -->
+El estado de carga es asimétrico: Sofi aportó la mayor parte de las etiquetas
+(`r sum(sheets$validator=="sofi")` filas, su lote original completo), mientras que Lican y
+Jaime están a mitad de su lista. Es importante notar que **nadie utilizó `confianza = 0`**:
+ante la duda, los evaluadores prefirieron asignar una clase con confianza baja (2–3) antes que
+declarar el punto indeterminable, por lo que no se excluyó ninguna fila por ese criterio y la
+incertidumbre queda registrada en el eje de confianza, no como faltante.
+
+Vale aclarar la composición de "N usable": de los `r qc_df$n_usable[1]` puntos usables de 2017,
+solo `r kappa_df$n_pairs[1] - kappa_df$split[1]` tienen **doble validación con acuerdo** (los que
+arman la grilla de las figuras); el resto —
+`r qc_df$n_single_design[1] + qc_df$n_single_partial[1]` puntos — tiene **un solo validador**,
+sea por diseño (S2/S3, que están asignados a 1 de 3 validadores) o porque el segundo integrante
+de un par S1 todavía no cargó su parte (`r qc_df$n_single_partial[1]` casos en 2017). Ambos casos
+son indistinguibles en las métricas tabulares (matriz de confusión, near/far, Olofsson), pero en
+las figuras de la §5 se muestran por separado, en la banda marginal "1 val.".
+
+# Exactitud global y error de retama
+
+```{r conf-tables, results='asis'}
+for (yr in YEARS) {
+  cc <- conf_by_year[[as.character(yr)]]
+  cm <- data.frame(
+    ` ` = c("**mapa: Retama**", "**mapa: No_retama**"),
+    `ref: Retama`    = c(cc["TP"], cc["FN"]),
+    `ref: No_retama` = c(cc["FP"], cc["TN"]),
+    check.names = FALSE)
+  cat(knitr::kable(cm, caption = sprintf("Matriz de confusión %d (conteo de muestras).", yr)),
+      sep = "\n")
+  cat("\n\n")
+}
+```
+
+```{r metrics-table}
+mt <- metrics_uw_df
+disp <- data.frame(
+  Métrica = c("Exactitud global (OA)",
+              "Retama — comisión (CE)", "Retama — omisión (OE)",
+              "Retama — user's acc. (UA)", "Retama — producer's acc. (PA)",
+              "No-retama — comisión (CE)", "No-retama — omisión (OE)"),
+  `2017` = c(pct(mt$OA[1]), pct(mt$CE_retama[1]), pct(mt$OE_retama[1]),
+             pct(mt$UA_retama[1]), pct(mt$PA_retama[1]),
+             pct(mt$CE_noret[1]), pct(mt$OE_noret[1])),
+  `2025` = c(pct(mt$OA[2]), pct(mt$CE_retama[2]), pct(mt$OE_retama[2]),
+             pct(mt$UA_retama[2]), pct(mt$PA_retama[2]),
+             pct(mt$CE_noret[2]), pct(mt$OE_noret[2])),
+  check.names = FALSE)
+kable(disp, caption = "Métricas crudas (por conteo de muestras), por año.")
+```
+
+<!-- AGENT_INTERP:retama -->
+El mapa clasifica bien en conjunto (OA ≈ 90–93%). Para la clase **retama**, los dos tipos de
+error son **moderados y de magnitud parecida**: la **comisión** (píxeles mapeados como retama
+que la foto-interpretación considera no-retama) ronda **12–17%**, y la **omisión** (retama según
+la referencia que el mapa no marcó) **10–13%**. En 2017 domina levemente la comisión (16.6% vs 10.0% de
+omisión): el modelo tiende a *sobre-marcar* algo de retama ese año. En 2025 los dos errores se
+emparejan (12.5% comisión, 13.1% omisión). No hay un sesgo fuerte y sistemático hacia sobre- o
+sub-estimar la retama, lo cual es deseable para comparar cobertura entre años.
+
+# Error de no-retama: cercano (S2) vs lejano (S3)
+
+```{r nearfar-table}
+nf <- nearfar_df
+nf_disp <- data.frame(
+  Año  = nf$year,
+  Zona = ifelse(nf$zone == "near", "near (S2 + S1 año apagado)", "far (S3)"),
+  `n (muestras no-retama)` = nf$n,
+  `Actual retama (FN)` = nf$FN,
+  `Actual no-retama (TN)` = nf$TN,
+  `Comisión no-retama` = pct(nf$CE_noret),
+  check.names = FALSE)
+kable(nf_disp, caption = "Comisión del no-retama desglosada por cercanía a la retama mapeada.")
+```
+
+<!-- AGENT_INTERP:nearfar -->
+El resultado clave del diseño estratificado: **el error se concentra por completo en la zona
+cercana**. En el fondo **lejano (S3)** la comisión del no-retama es **0% en ambos años**
+(`r nf$TN[nf$zone=="far" & nf$year==2017]` de `r nf$n[nf$zone=="far" & nf$year==2017]` puntos
+en 2017 y `r nf$TN[nf$zone=="far" & nf$year==2025]` de `r nf$n[nf$zone=="far" & nf$year==2025]`
+en 2025 correctamente clasificados como no-retama): lejos de toda retama mapeada, el mapa
+prácticamente no produce falsos no-retama ni falsos positivos. Esto **valida empíricamente el
+supuesto** que motiva la variante *near-only* (`09vNear_`, retirada del pipeline publicado a
+`legacy/gee_scripts_09vNear/` por falta de App de validación operativa): gastar puntos en S3
+aporta poco.
+En cambio, en la zona **cercana** la comisión del no-retama es ~6–7% (2017: 6.8%, 2025: 6.2%):
+son píxeles de fondo, adyacentes a retama conocida, donde el mapa **omitió** retama que la
+foto-interpretación sí ve (bordes de parche, retama incipiente, fragmentos sub-píxel). Es el
+tipo de error esperable en el límite de la resolución de Sentinel-2 y en zonas semi-urbanizadas.
+
+# Concordancia inter-observador y confianza
+
+```{r kappa-table}
+kd <- kappa_df
+kd_disp <- data.frame(
+  Año = kd$year,
+  `Pares evaluados` = kd$n_pairs,
+  `% acuerdo` = pct(kd$pct_agreement),
+  Kappa = num3(kd$kappa),
+  `Ambos retama` = kd$both_retama,
+  `Split` = kd$split,
+  `Ambos no-retama` = kd$both_noret,
+  check.names = FALSE)
+kable(kd_disp, caption = "Acuerdo entre los dos evaluadores (solo puntos S1 con doble validación).")
+```
+
+<!-- AGENT_INTERP:kappa -->
+La concordancia entre observadores es **sustancial en 2017 (κ = `r num3(kappa_df$kappa[1])`,
+`r pct(kappa_df$pct_agreement[1])` de acuerdo)** y baja a **moderada en 2025
+(κ = `r num3(kappa_df$kappa[2])`, `r pct(kappa_df$pct_agreement[2])`)**. La caída es informativa:
+los desacuerdos (*split*) casi se duplican (17 → 26) y los "ambos no-retama" crecen frente a los
+"ambos retama". La causa aparece en las observaciones de los propios validadores —repetidamente
+anotan *"no hay imagen de alta resolución para 2025"*—: al degradarse la evidencia de alta
+resolución hacia el final de la serie, 2025 es intrínsecamente más difícil de foto-interpretar,
+y esa dificultad se traslada tanto al acuerdo inter-observador como (probablemente) al error del
+mapa.
+
+## Terminología {-}
+
+> Recordatorio, como en todo el reporte: el **valor de referencia** es el que asignan los
+> validadores; el **mapa** es lo que se evalúa. Vale también para la banda marginal de las dos
+> figuras siguientes, donde el "voto" es la etiqueta de un único validador.
+
+## Distribución conjunta de la confianza (Figura 1)
+
+Como la confianza toma solo 10 valores discretos por evaluador, el par (A, B) vive en una
+**grilla de 10 × 10**, y una nube de puntos superpone decenas de observaciones sobre el mismo
+nodo. Las dos figuras que siguen reemplazan al *scatter* por esa grilla: la Figura 1 muestra
+**cuánta masa** cae en cada combinación de confianzas, y la Figura 2 abre cada nodo para mostrar
+**qué pasó** ahí (voto de la referencia × clase del mapa).
+
+Ambas figuras cubren **todos los puntos usables**, no solo los que tienen doble validación: los
+puntos con un solo validador (la mayoría de S2/S3 por diseño, más algún par S1 todavía a medio
+cargar) no tienen un par (A, B) — tienen una sola confianza — así que se muestran en una **banda
+marginal** separada debajo de la grilla ("1 val."), con la misma lógica de lectura pero indexada
+por esa única confianza.
+
+```{r lattice-numbers, include=FALSE}
+lat <- lapply(as.character(YEARS), function(y) {
+  b <- bubble_tabs[[y]]; v <- votegrid_tabs[[y]]
+  bp <- b[b$region == "pair", ]; bs <- b[b$region == "single", ]
+  vp <- v[v$region == "pair", ]; vs <- v[v$region == "single", ]
+  n  <- sum(bp$n); ns <- sum(bs$n)
+  st  <- tapply(vp$n, vp$status, sum)
+  sts <- tapply(vs$n, vs$status, sum)
+  list(n = n, ns = ns, occ = sum(bp$n > 0),
+       hi = 100 * sum(bp$n[bp$A >= 8 & bp$B >= 8]) / n,
+       lo = 100 * sum(bp$n[bp$A <= 5 & bp$B <= 5]) / n,
+       ok = 100 * st[["correct"]] / n, bad = 100 * st[["incorrect"]] / n,
+       sp = 100 * st[["split"]] / n,
+       ok_s  = 100 * ifelse(is.na(sts[["correct"]]), 0, sts[["correct"]]) / ns,
+       bad_s = 100 * ifelse(is.na(sts[["incorrect"]]), 0, sts[["incorrect"]]) / ns)
+})
+names(lat) <- as.character(YEARS)
+p1 <- function(x) formatC(x, format = "f", digits = 1)
+```
+
+```{r bubble-2017, fig.width=9, fig.height=7.3, fig.cap="Figura 1a — Distribución conjunta de la confianza de los dos evaluadores, 2017 (grilla) y de los puntos con un solo validador (banda '1 val.'). Cada región normalizada contra su propio total."}
+print(bubble_plots[["2017"]])
+```
+
+```{r bubble-2025, fig.width=9, fig.height=7.3, fig.cap="Figura 1b — Distribución conjunta de la confianza, 2025 (grilla + banda)."}
+print(bubble_plots[["2025"]])
+```
+
+En la **grilla** (pares), la masa está fuertemente concentrada en la **esquina de alta
+confianza**: en 2017, **`r p1(lat[["2017"]]$hi)`%** de los pares tienen ambos evaluadores en
+8–10, contra apenas `r p1(lat[["2017"]]$lo)`% con ambos en ≤5; solo `r lat[["2017"]]$occ` de las
+100 combinaciones posibles llegan a ocuparse. En **2025 esa concentración se afloja**
+(`r p1(lat[["2025"]]$hi)`% con ambos ≥8, contra `r p1(lat[["2017"]]$hi)`% en 2017): la nube se
+corre hacia confianzas medias. Es la misma señal que da el kappa, vista ahora sobre el eje de
+*certeza declarada* en vez del de *acuerdo*, y apunta a lo mismo — 2025 se interpretó con menos
+evidencia disponible. La grilla también muestra que la confianza es **simétrica** (la nube se
+alinea sobre la diagonal): cuando un punto es difícil, tiende a serlo para los dos, lo que
+respalda tratar la confianza baja como propiedad del punto y no del evaluador.
+
+En la **banda** (`r lat[["2017"]]$ns` puntos de un solo validador en 2017,
+`r lat[["2025"]]$ns` en 2025 — casi 3,5 veces más puntos que en la grilla), la masa también se
+concentra en confianza 9–10, y con más fuerza que en la grilla: son en su mayoría puntos S2/S3,
+fondo no-retama lejos del límite de la mancha, donde un solo validador ya está seguro. Esto es
+consistente con el diseño de muestreo: S2/S3 se asignaron a un único validador precisamente
+porque, a priori, esos puntos son menos ambiguos que el borde de la mancha (S1), que por eso
+recibe doble validación.
+
+## Voto de la referencia contra la clase del mapa (Figura 2)
+
+```{r votegrid-2017, fig.width=11, fig.height=10.5, fig.cap="Figura 2a — Voto de la referencia (filas) contra la clase del mapa (columnas) en cada combinación de confianzas, 2017 (grilla) y por confianza única (banda '1 val.'). Los 6 valores de cada bloque suman 100%; el tamaño del número es el n absoluto de la celda."}
+print(votegrid_plots[["2017"]])
+```
+
+```{r votegrid-2025, fig.width=11, fig.height=10.5, fig.cap="Figura 2b — Voto de la referencia contra la clase del mapa por combinación de confianzas, 2025 (grilla + banda)."}
+print(votegrid_plots[["2025"]])
+```
+
+Cada nodo de la grilla se abre en **6 celdas**: las filas agrupan el voto conjunto de los dos
+validadores (arriba *ambos Retama*, al medio *1 vs 1*, abajo *ambos No_retama*) y las columnas,
+la clase que asigna el mapa (izquierda Retama, derecha No_retama). El número es el porcentaje
+**dentro de ese bloque**, y su tamaño, cuántos puntos lo sostienen — un "100" diminuto es un solo
+punto, no una tendencia. La **banda inferior** reutiliza la misma geometría para los puntos de un
+solo validador: la fila del medio ("1 vs 1") queda **vacía por construcción** — no hay desacuerdo
+posible con un solo observador —, así que ahí el bloque solo puede tener celdas azules o rojas.
+
+Leído así, el patrón dominante es que **los aciertos (azul) se acumulan arriba a la derecha de la
+grilla**, es decir donde ambos evaluadores declararon alta confianza: en 2017 el
+`r p1(lat[["2017"]]$ok)`% de los pares cae en celdas de acuerdo mapa–referencia, y la confianza
+media de quienes acertaron (≈ `r num3(mean(pair_df$x[pair_df$year==2017 & pair_df$vote!="split" & ((pair_df$vote=="both_retama")==(pair_df$map==1))]))`)
+supera a la de los casos donde el mapa se equivoca
+(≈ `r num3(mean(pair_df$x[pair_df$year==2017 & pair_df$vote!="split" & ((pair_df$vote=="both_retama")!=(pair_df$map==1))]))`).
+**Los errores del mapa (rojo) no se distribuyen al azar sobre la grilla**: aparecen sobre todo en
+bloques de confianza intermedia, donde la escena es ambigua también para los humanos — y unos
+pocos, más preocupantes, en bloques 9–10 donde ambos validadores estaban seguros de contradecir al
+mapa. Esos últimos son los candidatos naturales a inspección visual dirigida.
+
+La comparación entre años es directa: los errores rojos bajan de `r p1(lat[["2017"]]$bad)`% a
+`r p1(lat[["2025"]]$bad)`% del total, pero el gris (*1 vs 1*, sin consenso) sube de
+`r p1(lat[["2017"]]$sp)`% a `r p1(lat[["2025"]]$sp)`%. Conviene no leer esa mejora aparente como
+un mapa más exacto en 2025: **parte del error simplemente migró a la categoría "sin consenso"**,
+que se descarta de la matriz de confusión. Con menos evidencia de alta resolución, los casos que
+en 2017 se resolvían como un desacuerdo claro contra el mapa, en 2025 se resuelven como un
+desacuerdo entre humanos.
+
+En la **banda**, el mapa acierta con más frecuencia que en la grilla:
+`r p1(lat[["2017"]]$ok_s)`% de los puntos de un solo validador coinciden con el mapa en 2017
+(`r p1(lat[["2025"]]$ok_s)`% en 2025), contra `r p1(lat[["2017"]]$ok)`% / `r p1(lat[["2025"]]$ok)`%
+en la grilla par-validada. Tiene sentido con lo anterior: la banda es sobre todo fondo lejos del
+borde de la mancha, donde tanto el mapa como el validador único suelen coincidir en "no-retama"
+con alta confianza; los desacuerdos de la banda (rojo) son minoría y se concentran, igual que en
+la grilla, en confianzas intermedias.
+
+> El *scatter* original (un punto por pxid-año, con flechas 2017→2025) se sigue exportando a
+> `analysis/09v_pairConfidence_scatter.png` para consulta puntual del recorrido de un mismo píxel
+> entre años; las dos figuras de grilla lo reemplazan en este reporte.
+
+# Estimador de Olofsson (ponderado por área)
+
+```{r olofsson, results='asis'}
+if (!is.null(olofsson_df)) {
+  o <- olofsson_df
+  od <- data.frame(
+    Año = o$year,
+    `OA (IC95%)` = sprintf("%s [%s, %s]", pct(o$OA), pct(o$OA_lo), pct(o$OA_hi)),
+    `CE retama` = pct(o$CE_retama), `OE retama` = pct(o$OE_retama),
+    `UA retama (IC95%)` = sprintf("%s [%s, %s]", pct(o$UA_retama), pct(o$UA_retama_lo), pct(o$UA_retama_hi)),
+    `PA retama (IC95%)` = sprintf("%s [%s, %s]", pct(o$PA_retama), pct(o$PA_retama_lo), pct(o$PA_retama_hi)),
+    check.names = FALSE)
+  cat(knitr::kable(od, caption = "Estimador estratificado de Olofsson (ponderado por área)."), sep = "\n")
+  cat("\n\n")
+  if (!is.null(olofsson_area_df)) {
+    ad <- data.frame(Año = olofsson_area_df$year,
+      `Proporción de área con retama (IC95%)` = sprintf("%s [%s, %s]",
+        pct(olofsson_area_df$area_prop_retama), pct(olofsson_area_df$area_lo), pct(olofsson_area_df$area_hi)),
+      check.names = FALSE)
+    cat(knitr::kable(ad, caption = "Área estimada de retama."), sep = "\n")
+  }
+} else {
+  cat("> **Pendiente.** Los pesos de área **Wᵢ** no están cargados en `09v_valAnalysis_compute.R`",
+      "(`Wi <- c(S1=NA, S2=NA, S3=NA)`), así que el estimador ponderado no se calculó todavía.",
+      "Pegá los tres valores que imprime `09v_valGenerator.js` (sección 5, *\"Wi ... suma~1\"*)",
+      "en la consola de GEE y volvé a renderizar: se completa automáticamente esta sección con",
+      "OA / UA / PA con intervalos de confianza y el área estimada de retama por año.\n")
+}
+```
+
+<!-- AGENT_INTERP:olofsson -->
+Como referencia para cuando se carguen los Wᵢ: la ponderación por área **subirá** la OA respecto
+de la cruda. El estrato lejano S3 ocupa la mayor parte del territorio pero está poco muestreado
+(`r sum(mk$stratum==3)` puntos) y tiene error ~0; al pesarlo por su área real, su exactitud casi
+perfecta domina el promedio. La UA/PA de retama, en cambio, dependen sobre todo de S1 y cambiarán
+poco. Los intervalos de confianza serán más informativos que el punto crudo para el paper.
+
+# Limitaciones
+
+- **Métricas crudas, no ponderadas por área** (Olofsson pendiente de los Wᵢ). Los números de
+  arriba tratan cada muestra por igual y no reflejan todavía la exactitud a escala de todo el ROI.
+- **Validación incompleta:** Lican `r sum(sheets$validator=="lican")` y Jaime
+  `r sum(sheets$validator=="jaime")` filas cargadas (de ~390 cada uno); Sofi
+  `r sum(sheets$validator=="sofi")` (su lote original). Los ~100 puntos transferidos a Sofi el
+  2026-07-27 aún no se bajaron (quedaron fuera por el truncado de la planilla más grande). Los
+  pares con ambos observadores cargados son `r kappa_df$n_pairs[1]` por año, no los
+  `r length(pair_pxids)` totales.
+- **Desacuerdos descartados:** `r qc_df$n_disagree[1]` (2017) y `r qc_df$n_disagree[2]` (2025)
+  pares se excluyeron de la matriz por no haber consenso.
+- **Dominio near/far:** la omisión del no-retama en *far* es 0 por construcción del estrato
+  (S3 nunca es mapa-retama), no un resultado empírico.
+- **Fuente de verdad de los pares:** la asignación de validadores sale de la columna
+  `validators` del master key (ya refleja el rebalanceo del 2026-07-27), no del round-robin
+  original.
+- **La banda "1 val." de las Figuras 1 y 2 mezcla dos orígenes distintos:** puntos S2/S3
+  asignados a un solo validador *por diseño* (`r qc_df$n_single_design[1]`, año 2017) y puntos S1
+  con par asignado donde *todavía falta cargar* al segundo validador (`r qc_df$n_single_partial[1]`,
+  año 2017 — desaparecerán de la banda y pasarán a la grilla a medida que se complete la carga).
+  La figura no los distingue visualmente; la tabla de QC (§2) sí.
+
+---
+
+<small>Generado por `09v_valAnalysis.Rmd` + `09v_valAnalysis_compute.R`. Tablas y figuras
+crudas exportadas en `validation/analysis/`.</small>

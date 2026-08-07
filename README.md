@@ -96,8 +96,7 @@ the blind asset `09v_valPoints_fc`. Results are in preparation.
 ```
 .
 ├── 01_sentinelMosaic.js … 08_RF2patchFilter.js   # canonical classification pipeline
-├── 09v_val*.{js,R}                               # independent validation (generator, App, randomizer)
-├── 09vNear_val*.{js,R}                            # near-only validation variant (2 strata)
+├── 09v_val*.{js,R}                               # independent validation (generator, App, randomizer, analysis)
 ├── 11_predsVisualizer.js, 11.2_…finalSeries.js   # visualization
 ├── 12_gridExport.js                              # analysis grid
 ├── r_analysis/                                   # downstream R analysis (occupation, drivers, management)
