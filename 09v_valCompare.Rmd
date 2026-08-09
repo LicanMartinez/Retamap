@@ -1,0 +1,355 @@
+---
+title: "Comparación de variantes del mapa de retama"
+subtitle: "RF2 global vs. RF2 por año — misma muestra de validación, mismas etiquetas humanas"
+date: "`r format(Sys.Date())`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    df_print: kable
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+# Runs 09v_valAnalysis_compute.R once per map version and builds the paired
+# comparison. Everything below is derived from those objects — no number in the
+# prose is typed by hand, so this file can be re-rendered as-is when new arms
+# (e.g. the 9-year yearly run WITH gap-fill) are added to CMP_VARIANTS.
+source(file.path("D:/Lican/uni/Investigacion/Colaboraciones_y_ayudas/Retamap",
+                 "gee_scripts", "09v_valCompare.R"))
+library(knitr)
+
+pct   <- function(x) ifelse(is.na(x), "\u2014", sprintf("%.1f%%", 100 * as.numeric(x)))
+pp    <- function(x) ifelse(is.na(x), "\u2014", sprintf("%+.1f pp", 100 * as.numeric(x)))
+num3  <- function(x) ifelse(is.na(x), "\u2014", formatC(as.numeric(x), format = "f", digits = 3))
+pctci <- function(e, lo, hi) ifelse(is.na(e), "\u2014",
+  sprintf("%.1f%% [%.1f, %.1f]", 100*as.numeric(e), 100*as.numeric(lo), 100*as.numeric(hi)))
+
+# --- accessors into the side-by-side tables ---------------------------------
+crude_row <- function(metric, yr, tag) {
+  r <- cmp_crude[cmp_crude$metric == metric & cmp_crude$year == yr &
+                 cmp_crude$variant == tag, ]
+  if (!nrow(r)) NULL else r[1, ]
+}
+olo_row <- function(metric, yr, tag) {
+  if (is.null(cmp_olof)) return(NULL)
+  r <- cmp_olof[cmp_olof$metric == metric & cmp_olof$year == yr &
+                cmp_olof$variant == tag, ]
+  if (!nrow(r)) NULL else r[1, ]
+}
+crude_ci <- function(metric, yr, tag) { r <- crude_row(metric, yr, tag)
+  if (is.null(r)) "\u2014" else pctci(r$est, r$lo, r$hi) }
+olo_ci   <- function(metric, yr, tag) { r <- olo_row(metric, yr, tag)
+  if (is.null(r)) "\u2014" else pctci(r$est, r$lo, r$hi) }
+mc <- function(yr) mcnemar_df[mcnemar_df$year == yr, ][1, ]
+
+# do two intervals overlap? (the honest way to say "the sample can't tell them apart")
+overlaps <- function(metric, yr, a, b, weighted = TRUE) {
+  ra <- if (weighted) olo_row(metric, yr, a) else crude_row(metric, yr, a)
+  rb <- if (weighted) olo_row(metric, yr, b) else crude_row(metric, yr, b)
+  if (is.null(ra) || is.null(rb) || is.na(ra$lo) || is.na(rb$lo)) return(NA)
+  ra$lo <= rb$hi && rb$lo <= ra$hi
+}
+
+# wide table: rows = metric, one column per variant, cells = est [lo, hi]
+side_by_side <- function(metrics, yr, weighted = FALSE) {
+  f <- if (weighted) olo_ci else crude_ci
+  out <- data.frame(Métrica = metrics, stringsAsFactors = FALSE)
+  for (tg in TAGS) out[[var_label[[tg]]]] <- vapply(metrics, f, "", yr = yr, tag = tg)
+  out
+}
+
+BASE_L <- var_label[[BASELINE_TAG]]
+TEST_L <- var_label[[TEST_TAG]]
+HAS_W  <- !is.null(cmp_olof)
+N_EVAL <- nrow(runs[[1]]$usable)
+N_POSS <- nrow(mk_cmp) * length(CMP_YEARS)
+```
+
+# Resumen ejecutivo
+
+> **Convención (vale para todo el reporte).** El **valor de referencia** es el que
+> asignan los validadores por foto-interpretación; el **mapa** es *lo evaluado*.
+> Comisión = el mapa marca retama donde la referencia dice que no hay; omisión =
+> el mapa no la marca donde la referencia dice que sí.
+
+Se comparan **`r length(TAGS)` versiones del mapa** sobre **exactamente los mismos
+`r N_EVAL` pares (punto, año)** y las mismas etiquetas humanas. Los puntos, los
+estratos y los pesos de área `Wi` provienen del diseño de muestreo original y **no
+cambian** entre versiones: lo único que cambia es la etiqueta que el mapa asigna a
+cada punto.
+
+```{r}
+kable(data.frame(
+  Clave    = TAGS,
+  Versión  = unname(var_label[TAGS]),
+  Rol      = ifelse(TAGS == BASELINE_TAG, "baseline del A/B",
+             ifelse(TAGS == TEST_TAG,     "variante en prueba",
+             ifelse(TAGS == CONTROL_TAG,  "control / contexto", "—")))))
+```
+
+El contraste que interesa es **`r BASE_L`** vs. **`r TEST_L`**: idénticos en todo
+salvo el entrenamiento del RF2. `r var_label[[CONTROL_TAG]]` entra como contexto —
+la diferencia contra el baseline mide el efecto del **gap-fill**, no del
+entrenamiento.
+
+**Por qué el baseline no lleva gap-fill.** El script 07 aplica reglas temporales
+(`sumOnes == N-1 → 1`, `sumOnes == 1 → 0`) que con solo dos años colapsan una sobre
+otra e intercambian todo píxel donde 2017 y 2025 discrepan. La variante por año se
+corrió solo para los dos años validados, así que no puede pasar por gap-fill; para
+que la comparación aísle el entrenamiento, el baseline se produjo **sin gap-fill
+también**, aplicando el mismo filtro de parches sobre las predicciones crudas del
+RF2 global.
+
+```{r}
+kable(do.call(rbind, lapply(CMP_YEARS, function(yr) {
+  m <- mc(yr)
+  data.frame(
+    Año = yr,
+    `OA baseline` = pct(m$acc_base),
+    `OA variante` = pct(m$acc_test),
+    `Δ (no ponderada)` = pp(m$delta_acc),
+    `McNemar p` = num3(m$p_value),
+    check.names = FALSE)
+})))
+```
+
+```{r results='asis'}
+verdict <- vapply(CMP_YEARS, function(yr) {
+  m <- mc(yr)
+  dir <- if (m$delta_acc > 0) "por encima" else if (m$delta_acc < 0) "por debajo" else "igual"
+  sig <- if (!is.na(m$p_value) && m$p_value < 0.05) "**diferencia significativa**" else
+         "diferencia **no significativa**"
+  sprintf("En %d la variante queda %s del baseline (%s de exactitud no ponderada; %s, McNemar p = %s): de los %d puntos en que ambos mapas difieren, %d los acierta solo el baseline y %d solo la variante.",
+          yr, dir, pp(m$delta_acc), sig, num3(m$p_value),
+          m$n_only_base_correct + m$n_only_test_correct,
+          m$n_only_base_correct, m$n_only_test_correct)
+}, "")
+cat(paste0("- ", verdict, collapse = "\n"), "\n")
+```
+
+```{r results='asis', eval=HAS_W}
+cat("\nEn la lectura **ponderada por área** (la que describe el ROI), la omisión de retama —la métrica más informativa y la debilidad conocida del mapa— se compara así:\n\n")
+for (yr in CMP_YEARS) {
+  ov <- overlaps("OE_retama", yr, BASELINE_TAG, TEST_TAG)
+  cat(sprintf("- **%d** — omisión de retama: %s (%s) vs. %s (%s). Los intervalos %s, así que la muestra %s.\n",
+      yr, olo_ci("OE_retama", yr, BASELINE_TAG), BASE_L,
+      olo_ci("OE_retama", yr, TEST_TAG), TEST_L,
+      if (isTRUE(ov)) "**se solapan**" else "**no se solapan**",
+      if (isTRUE(ov)) "no distingue las dos versiones en esta métrica"
+                 else "sí respalda una diferencia real"))
+}
+```
+
+# Verificación de la extracción y del apareo
+
+La columna de control se re-extrajo del mismo asset que produjo las columnas
+`m2017`/`m2025` congeladas en `09v_master_key.csv`. Si no coincidieran fila por
+fila habría un desalineamiento de grilla y ninguna métrica sería interpretable —
+el motor aborta en ese caso, así que este cuadro con ceros es condición de que
+todo lo demás exista.
+
+```{r}
+kable(control_df, col.names = c("Año", "n puntos", "discrepancias",
+                                "n(retama) master key", "n(retama) re-extraído"))
+```
+
+Además, la reconciliación de la referencia es independiente del mapa, de modo que
+las `r length(TAGS)` versiones se puntúan sobre las **mismas filas**
+(`r N_EVAL` pares punto-año). Eso es lo que hace que la comparación sea **pareada**
+y habilita el test de McNemar en lugar de comparar intervalos independientes.
+
+```{r}
+kable(runs[[1]]$qc_df,
+      caption = "Control de calidad (idéntico entre versiones: no depende del mapa)")
+```
+
+# Métricas crudas (no ponderadas), lado a lado
+
+Intervalos de Wilson al 95%. **No** incorporan la estratificación: describen la
+precisión de la muestra tal como se sorteó. Los intervalos que describen el ROI
+son los ponderados de la sección siguiente.
+
+```{r results='asis'}
+for (yr in CMP_YEARS) {
+  cat("\n## ", yr, "\n\n", sep = "")
+  print(kable(side_by_side(
+    c("OA", "UA_retama", "CE_retama", "PA_retama", "OE_retama",
+      "UA_noret", "CE_noret", "PA_noret", "OE_noret"), yr, weighted = FALSE)))
+  cat("\n")
+}
+```
+
+## Desglose cerca / lejos del no-retama
+
+`near` = estratos S1 y S2 (dentro del entorno de ~1 km de retama mapeada);
+`far` = S3 (el grueso del área). El error de comisión en `far` es el número que
+sostiene el supuesto de que fuera del entorno cercano el mapa casi no se equivoca.
+
+```{r results='asis'}
+for (yr in CMP_YEARS) {
+  cat("\n### ", yr, "\n\n", sep = "")
+  print(kable(side_by_side(
+    c("CE_noret_near", "CE_noret_far", "OE_noret_near", "OE_noret_far"),
+    yr, weighted = FALSE)))
+  cat("\n")
+}
+```
+
+```{r results='asis'}
+for (yr in CMP_YEARS) {
+  b <- crude_row("CE_noret_far", yr, BASELINE_TAG)
+  t <- crude_row("CE_noret_far", yr, TEST_TAG)
+  if (is.null(b) || is.null(t)) next
+  cat(sprintf("- **%d** — comisión lejana: %s con %s (%d errores en %d puntos) y %s con %s (%d en %d).\n",
+      yr, pctci(b$est, b$lo, b$hi), BASE_L, b$k, b$n,
+          pctci(t$est, t$lo, t$hi), TEST_L, t$k, t$n))
+}
+```
+
+# Estimador ponderado por área (Olofsson)
+
+```{r results='asis', eval=!HAS_W}
+cat("Los pesos `Wi` no están cargados en `09v_valAnalysis_compute.R`, así que esta sección no se calculó. Completá los tres pesos que imprime `09v_valGenerator.js` (sección 5) y volvé a renderizar.\n")
+```
+
+```{r results='asis', eval=HAS_W}
+cat("Ponderado por la superficie de cada estrato, con varianza estratificada (Olofsson et al. 2014). Es la lectura válida para el ROI completo.\n")
+for (yr in CMP_YEARS) {
+  cat("\n## ", yr, "\n\n", sep = "")
+  print(kable(side_by_side(
+    c("OA", "UA_retama", "CE_retama", "PA_retama", "OE_retama",
+      "UA_noret", "CE_noret", "PA_noret", "OE_noret"), yr, weighted = TRUE)))
+  cat("\n")
+}
+```
+
+```{r results='asis', eval=HAS_W}
+cat("\n## Superficie estimada de retama\n\n")
+tb <- data.frame(Año = CMP_YEARS)
+for (tg in TAGS) tb[[var_label[[tg]]]] <- vapply(CMP_YEARS, function(yr) {
+  r <- cmp_area[cmp_area$year == yr & cmp_area$variant == tg, ]
+  if (!nrow(r)) "\u2014" else pctci(r$area_prop, r$lo, r$hi) }, "")
+print(kable(tb, caption = "Proporción del ROI clasificada como retama por la referencia, ponderada"))
+```
+
+```{r results='asis', eval=HAS_W}
+cat("\nDos advertencias de lectura, iguales que en el reporte de validación principal:\n\n")
+cat(sprintf("- La **OA ponderada** (%s con %s en %d) no es citable como logro: está dominada por el fondo lejano, que ocupa el 93.5%% del ROI y es trivial de clasificar. La comparación útil entre versiones son UA/PA de retama.\n",
+    olo_ci("OA", CMP_YEARS[1], BASELINE_TAG), BASE_L, CMP_YEARS[1]))
+cat("- Los intervalos ponderados salen de la aproximación normal (estimación ± 1.96·SE) y **no se recortan a [0, 1]**: un estrato sin errores aporta varianza exactamente 0, así que un borde puede caer fuera del rango o quedar optimistamente angosto. Para los ceros, la lectura honesta es el intervalo de Wilson de la sección anterior.\n")
+```
+
+# Comparación pareada: `r BASE_L` vs. `r TEST_L`
+
+Las dos versiones se evalúan en los mismos puntos con las mismas referencias, así
+que el test correcto es **McNemar** sobre el acierto por punto, y no la comparación
+de dos intervalos independientes. Es una prueba **no ponderada**: trata a cada punto
+muestreado por igual, ignorando la estratificación.
+
+```{r}
+kable(mcnemar_df,
+      col.names = c("Año", "n", "ambos aciertan", "ambos fallan",
+                    "solo baseline acierta", "solo variante acierta",
+                    "OA baseline", "OA variante", "Δ OA", "McNemar p"))
+```
+
+## Qué puntos cambió la variante
+
+Solo las filas donde las dos versiones asignan etiquetas distintas, por dirección
+del cambio y por estrato, con cuántos de esos cambios resultaron **correctos**
+según la referencia humana.
+
+```{r}
+if (nrow(flow_df)) {
+  fd <- flow_df
+  fd$`% acertados` <- pct(fd$n_test_correct / fd$n)
+  fd$estrato <- c("S1 mapa-retama", "S2 cercano", "S3 lejano")[fd$stratum]
+  kable(fd[, c("year", "direction", "estrato", "n", "n_test_correct", "% acertados")],
+        col.names = c("Año", "Dirección del cambio", "Estrato", "n cambiados",
+                      "aciertos de la variante", "% acertados"))
+} else {
+  kable(data.frame(Nota = "Las dos versiones asignan la misma etiqueta en todos los puntos."))
+}
+```
+
+```{r results='asis'}
+if (nrow(flow_df)) {
+  for (yr in CMP_YEARS) {
+    f <- flow_df[flow_df$year == yr, ]
+    if (!nrow(f)) next
+    add <- f[grepl("^0->1", f$direction), ]; rem <- f[grepl("^1->0", f$direction), ]
+    ga <- sum(add$n_test_correct); na_ <- sum(add$n)
+    gr <- sum(rem$n_test_correct); nr <- sum(rem$n)
+    cat(sprintf("- **%d** — la variante **agrega** retama en %d puntos (acierta %d, %s) y la **quita** en %d (acierta %d, %s).\n",
+        yr, na_, ga, pct(ifelse(na_ > 0, ga/na_, NA)),
+            nr, gr, pct(ifelse(nr > 0, gr/nr, NA))))
+  }
+  cat("\nLos cambios en S2 y S3 son los que más pesan en el estimador ponderado: un punto de S3 representa ~168 veces más superficie que uno de S1. Un puñado de comisiones nuevas en el fondo lejano puede empeorar la UA ponderada de retama mucho más de lo que sugiere el conteo crudo.\n")
+}
+```
+
+# Acuerdo entre observadores
+
+Es una propiedad de las etiquetas humanas, no del mapa: **idéntico para todas las
+versiones**, y por eso se reporta una sola vez.
+
+```{r}
+kable(runs[[1]]$kappa_df,
+      col.names = c("Año", "n pares", "% acuerdo", "kappa",
+                    "ambos retama", "ambos no-retama", "en desacuerdo"))
+```
+
+# Figuras de confianza por versión
+
+Grilla de confianza de los dos observadores (puntos par-validados) más la banda
+marginal de los puntos de un solo validador. El color indica si el mapa coincide
+con la referencia, de modo que la misma figura cambia entre versiones aunque los
+datos humanos sean los mismos.
+
+```{r results='asis'}
+for (yr in CMP_YEARS) {
+  for (tg in c(BASELINE_TAG, TEST_TAG)) {
+    f <- file.path(OUT_DIR, tg, paste0("09v_confLattice_voteGrid_", yr, ".png"))
+    if (!file.exists(f)) next
+    cat("\n**", var_label[[tg]], " — ", yr, "**\n\n", sep = "")
+    cat("![](", normalizePath(f, winslash = "/"), ")\n\n", sep = "")
+  }
+}
+```
+
+# Limitaciones
+
+- **La muestra fue estratificada por el mapa canónico.** Evaluar otra versión sobre
+  esos puntos sigue siendo insesgado —los estratos y los `Wi` son propiedades del
+  diseño, no del mapa— pero la **potencia es desigual**: la retama que una variante
+  agrega *fuera* del S1 canónico solo se muestrea a través de S2
+  (`r sum(runs[[1]]$usable$stratum == 2 & runs[[1]]$usable$year == CMP_YEARS[1])`
+  puntos evaluados) y S3
+  (`r sum(runs[[1]]$usable$stratum == 3 & runs[[1]]$usable$year == CMP_YEARS[1])`
+  puntos sobre el 93.5% del área). Un empeoramiento de comisión en zonas nuevas
+  puede quedar por debajo de la resolución de esta muestra.
+- **El baseline no es el mapa publicado.** Se le quitó el gap-fill a propósito para
+  aislar el efecto del entrenamiento. Las cifras de
+  `r var_label[[CONTROL_TAG]]` están para dimensionar cuánto aporta el gap-fill,
+  no para compararlas de igual a igual con la variante.
+- **La variante solo existe para `r paste(CMP_YEARS, collapse=" y ")`.** Si se
+  extiende a los nueve años, el gap-fill vuelve a ser aplicable y hay que
+  re-generar este reporte agregando esa versión a `CMP_VARIANTS`; recién ahí la
+  comparación contra el mapa publicado será de igual a igual.
+- **Carga de planillas incompleta.** Se evalúan `r N_EVAL` pares punto-año de los
+  `r N_POSS` posibles (`r pct(N_EVAL / N_POSS)`). Los que faltan no son un
+  subconjunto aleatorio —se cargaron en orden de `pxid`—, así que las diferencias
+  entre versiones pueden moverse cuando se complete.
+- **McNemar es no ponderado.** Responde "¿la variante acierta en más puntos
+  *muestreados*?", no "¿acierta en más *superficie*?". Para lo segundo hay que
+  mirar los intervalos ponderados, que son bastante más anchos.
+
+---
+
+*Generado por `09v_valCompare.Rmd` sobre `09v_valCompare.R` + `09v_valAnalysis_compute.R`.
+Cada versión escribe además su juego completo de tablas y figuras en
+`validation/analysis/<tag>/`.*

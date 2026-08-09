@@ -25,10 +25,11 @@
 #   - pair (2 validators) -> consensus if they agree; DISCARDED that year if they
 #                            disagree (reported as %)
 #   - confidence == 0 (no determinable) -> that label dropped for that year
-# Map label per (pxid, year) = m2017 / m2025 (blank = 0 no-retama, 1 = retama).
+# Map label per (pxid, year) = m2017 / m2025 (blank = 0 no-retama, 1 = retama),
+# from the master key by default or from MAP_LABELS when evaluating a variant.
 # Strata: 1 = S1 mapped-retama, 2 = S2 near background, 3 = S3 far background.
-# near/far breakdown of the no-retama class: near = S2 (+ S1 in its off-year,
-# i.e. stratum 1 pixels that are map-no-retama that year); far = S3.
+# near/far breakdown of the no-retama class: near = S1 + S2 (both inside the
+# ~1 km near-retama envelope by construction); far = S3.
 # =============================================================================
 
 suppressPackageStartupMessages(library(ggplot2))
@@ -37,17 +38,43 @@ suppressPackageStartupMessages(library(ggplot2))
 PROJECT_DIR <- "D:/Lican/uni/Investigacion/Colaboraciones_y_ayudas/Retamap"
 WORK_DIR    <- file.path(PROJECT_DIR, "gee_scripts", "validation")
 SHEETS_DIR  <- file.path(WORK_DIR, "sheets_filled")
-OUT_DIR     <- file.path(WORK_DIR, "analysis")
 MASTER_KEY  <- file.path(WORK_DIR, "09v_master_key.csv")
 YEARS       <- c(2017, 2025)
 VALIDATORS  <- c("lican", "sofi", "jaime")
 SEED        <- 42
 
+# --- MAP VARIANT hooks (defaults reproduce the canonical run exactly) --------
+# Set these BEFORE sourcing this file to evaluate an ALTERNATIVE map on the same
+# points and the same human reference labels (see 09v_valCompare.R):
+#   VARIANT_TAG : subfolder of analysis/ for this run's outputs ("" = canonical)
+#   MAP_LABELS  : data.frame(pxid, m2017, m2025) replacing the master key's map
+#                 columns. Everything downstream derives from those two columns,
+#                 so this single override is the whole variant mechanism.
+# The reference labels, strata and Wi are properties of the sampling DESIGN and
+# stay frozen — only the map under evaluation changes.
+# inherits = FALSE: only an explicit assignment in the environment this script is
+# evaluated in counts, so a stray global of the same name can never leak into a
+# run (09v_valCompare.R sources this repeatedly into fresh environments).
+if (!exists("VARIANT_TAG", inherits = FALSE)) VARIANT_TAG <- ""
+if (!exists("MAP_LABELS",  inherits = FALSE)) MAP_LABELS  <- NULL
+
+OUT_DIR <- if (nzchar(VARIANT_TAG)) {
+  file.path(WORK_DIR, "analysis", VARIANT_TAG)
+} else {
+  file.path(WORK_DIR, "analysis")
+}
+
 # Stratum AREA WEIGHTS Wi (proportion of ROI area in each stratum), printed by
 # 09v_valGenerator.js section 5 ("Wi ... suma~1") in the GEE console.
 # Fill all three to enable the Olofsson area-weighted estimator.
 # Leave any as NA -> only the crude (sample-based) metrics are produced.
-Wi <- c(S1 = NA_real_, S2 = NA_real_, S3 = NA_real_)
+# Loaded 2026-08-07 from the GEE console. Stratum areas (m^2) behind them:
+#   S1 =    55,178,037   S2 =   591,685,230   S3 = 9,273,053,977   (sum ~ 9.92e9)
+# S3 is 93.5% of the ROI, so the area-weighted estimator is dominated by the far
+# background — which is exactly why the crude metrics overstate the error.
+Wi <- c(S1 = 0.005562348528027356,
+        S2 = 0.059646186135871575,
+        S3 = 0.934791465336101)
 
 dir.create(OUT_DIR, showWarnings = FALSE, recursive = TRUE)
 
@@ -58,6 +85,21 @@ mk$stratum <- as.integer(mk$stratum)
 zero_blank <- function(x) ifelse(is.na(x) | x == "", 0L, as.integer(x))
 mk$m2017 <- zero_blank(mk$m2017)
 mk$m2025 <- zero_blank(mk$m2025)
+
+# Alternative map: swap in the variant's labels, keyed by pxid. Must cover every
+# pxid — a partial join would silently shrink the evaluated sample and make the
+# variant look different for the wrong reason.
+if (!is.null(MAP_LABELS)) {
+  stopifnot(all(c("pxid", "m2017", "m2025") %in% names(MAP_LABELS)))
+  stopifnot(!anyDuplicated(MAP_LABELS$pxid))
+  miss <- setdiff(mk$pxid, MAP_LABELS$pxid)
+  if (length(miss)) stop("MAP_LABELS missing ", length(miss), " pxid, e.g.: ",
+                         paste(utils::head(miss, 5), collapse = ", "))
+  i <- match(mk$pxid, MAP_LABELS$pxid)
+  mk$m2017 <- zero_blank(MAP_LABELS$m2017[i])
+  mk$m2025 <- zero_blank(MAP_LABELS$m2025[i])
+}
+
 mk_val   <- setNames(strsplit(mk$validators, ";"), mk$pxid)      # pxid -> chr vec
 mk_strat <- setNames(mk$stratum, mk$pxid)
 mapcol   <- list("2017" = setNames(mk$m2017, mk$pxid),
@@ -124,10 +166,14 @@ ana <- do.call(rbind, ana_rows)
 # usable rows for the confusion matrix: a defined reference (agree|single)
 usable <- ana[ana$status %in% c("agree", "single") & !is.na(ana$ref), ]
 
-# zone for the no-retama near/far split
-usable$zone <- ifelse(usable$stratum == 3, "far",
-               ifelse(usable$stratum == 2, "near",
-               ifelse(usable$stratum == 1 & usable$map == 0, "near", NA)))  # S1 on-year (map=1) => NA
+# Zone for the no-retama near/far split. Derived from the STRATUM alone: S1 and
+# S2 are both inside the ~1 km near-retama envelope by construction, S3 is the
+# far background. Deliberately independent of the map being evaluated, so an
+# alternative map (09v_valCompare.R) is split the same way as the canonical one.
+# Identical to the previous stratum+map rule for every reported quantity: CE is
+# computed only among map == 0 points, where S1 on-year (map == 1) drops out on
+# its own, and OE is now counted per zone instead of being assumed.
+usable$zone <- ifelse(usable$stratum == 3, "far", "near")
 
 # ---- 4. CRUDE (sample-based) METRICS per year -------------------------------
 conf2 <- function(map, ref) c(
@@ -143,8 +189,47 @@ metrics_from_conf <- function(cc) {
     CE_noret  = safe(FN, FN + TN), OE_noret  = safe(FP, FP + TN))
 }
 
+# --- binomial CIs for the crude (sample-based) ratios ------------------------
+# Every crude metric is "k successes out of n trials", so a Wilson score interval
+# is the right tool here: unlike the normal approximation it stays inside [0,1]
+# and still returns a usable upper bound when k == 0 (e.g. CE_far = 0/n, where a
+# Wald interval would collapse to the uninformative [0, 0]).
+# NOTE these are UNWEIGHTED intervals: they describe the precision of the sample
+# as drawn, ignoring the stratification. The design-relevant intervals are the
+# area-weighted ones in section 5 (Olofsson) — see section 5b for the comparison
+# against the SE the sampling design was sized for.
+Z95 <- qnorm(0.975)
+wilson_ci <- function(k, n, z = Z95) {
+  if (is.na(k) || is.na(n) || n <= 0)
+    return(c(est = NA_real_, se = NA_real_, lo = NA_real_, hi = NA_real_))
+  p   <- k / n
+  den <- 1 + z^2 / n
+  ctr <- (p + z^2 / (2 * n)) / den
+  hw  <- z * sqrt(p * (1 - p) / n + z^2 / (4 * n^2)) / den
+  c(est = p, se = sqrt(p * (1 - p) / n),
+    lo = max(0, ctr - hw), hi = min(1, ctr + hw))
+}
+# the (k, n) pair behind each crude metric, given a confusion vector cc
+crude_kn <- function(cc) {
+  TP <- unname(cc["TP"]); FP <- unname(cc["FP"])
+  FN <- unname(cc["FN"]); TN <- unname(cc["TN"])
+  list(OA        = c(TP + TN, TP + FP + FN + TN),
+       UA_retama = c(TP, TP + FP), CE_retama = c(FP, TP + FP),
+       PA_retama = c(TP, TP + FN), OE_retama = c(FN, TP + FN),
+       UA_noret  = c(TN, TN + FN), CE_noret  = c(FN, TN + FN),
+       PA_noret  = c(TN, TN + FP), OE_noret  = c(FP, TN + FP))
+}
+ci_table <- function(kn, yr) do.call(rbind, lapply(names(kn), function(mm) {
+  w <- wilson_ci(kn[[mm]][1], kn[[mm]][2])
+  data.frame(year = yr, metric = mm, k = kn[[mm]][1], n = kn[[mm]][2],
+             est = unname(w["est"]), se = unname(w["se"]),
+             lo = unname(w["lo"]), hi = unname(w["hi"]),
+             method = "Wilson 95%", row.names = NULL)
+}))
+
 conf_by_year   <- list()
 metrics_uw     <- list()
+metrics_ci     <- list()
 perstratum     <- list()
 nearfar        <- list()
 qc_by_year     <- list()
@@ -153,22 +238,39 @@ for (yr in YEARS) {
   cc <- conf2(uy$map, uy$ref)
   conf_by_year[[as.character(yr)]] <- cc
   m  <- metrics_from_conf(cc)
-  # near/far commission of no-retama (among map-no-retama points, by zone)
-  nz <- uy[uy$map == 0, ]
-  cef <- function(z) {
-    s <- nz[nz$zone == z & !is.na(nz$zone), ]
-    FN <- sum(s$ref == 1); TN <- sum(s$ref == 0)
-    c(FN = FN, TN = TN, n = FN + TN, CE_noret = safe(FN, FN + TN))
+  # near/far breakdown of the no-retama class, counted per zone.
+  # CE_noret = FN / (FN + TN) among map-no-retama points of the zone.
+  # OE_noret = FP / (FP + TN) among reference-no-retama points of the zone.
+  # FP is counted, not assumed: for the canonical map every FP necessarily sits
+  # in S1 (S1 IS "map == 1 in 2017 and/or 2025", so no FP can fall in S2/S3) and
+  # far therefore comes out at exactly 0 — but that identity is a property of
+  # the strata-defining map only. An alternative map can put retama on S2/S3
+  # points, and hard-coding OE_far = 0 would misattribute those errors to near.
+  zcell <- function(z) {
+    s  <- uy[uy$zone == z, ]
+    FN <- sum(s$map == 0 & s$ref == 1); TN <- sum(s$map == 0 & s$ref == 0)
+    FP <- sum(s$map == 1 & s$ref == 0)
+    c(FN = FN, TN = TN, FP = FP, n = FN + TN,
+      CE_noret = safe(FN, FN + TN), OE_noret = safe(FP, FP + TN))
   }
-  near <- cef("near"); far <- cef("far")
-  # omission of no-retama by zone: FP live in S1 on-year (near); far has no FP
-  fp_all <- sum(uy$map == 1 & uy$ref == 0)
-  oe_near <- safe(fp_all, fp_all + near["TN"])   # all FP are near (S1)
-  oe_far  <- safe(0,        0 + far["TN"])       # = 0 by stratum construction
+  near <- zcell("near"); far <- zcell("far")
+  oe_near <- unname(near["OE_noret"]); oe_far <- unname(far["OE_noret"])
+  # Wilson CIs for every crude ratio, including the near/far breakdown
+  kn <- c(crude_kn(cc), list(
+    CE_noret_near = c(unname(near["FN"]), unname(near["FN"] + near["TN"])),
+    CE_noret_far  = c(unname(far["FN"]),  unname(far["FN"]  + far["TN"])),
+    OE_noret_near = c(unname(near["FP"]), unname(near["FP"] + near["TN"])),
+    OE_noret_far  = c(unname(far["FP"]),  unname(far["FP"]  + far["TN"]))))
+  cit <- ci_table(kn, yr)
+  metrics_ci[[as.character(yr)]] <- cit
+  # same numbers in wide form (<metric>_lo / <metric>_hi) for inline use in the Rmd
+  wide <- as.data.frame(setNames(
+    as.list(as.vector(t(as.matrix(cit[, c("lo", "hi")])))),
+    as.vector(t(outer(cit$metric, c("_lo", "_hi"), paste0)))))
   metrics_uw[[as.character(yr)]] <- data.frame(year = yr, t(m),
     CE_noret_near = unname(near["CE_noret"]), CE_noret_far = unname(far["CE_noret"]),
     OE_noret_near = unname(oe_near),          OE_noret_far = unname(oe_far),
-    n_near = unname(near["n"]), n_far = unname(far["n"]), row.names = NULL)
+    n_near = unname(near["n"]), n_far = unname(far["n"]), wide, row.names = NULL)
   nearfar[[as.character(yr)]] <- rbind(
     data.frame(year = yr, zone = "near", t(near)),
     data.frame(year = yr, zone = "far",  t(far)))
@@ -193,6 +295,7 @@ for (yr in YEARS) {
     n_conf0_excluded = NA_integer_)  # filled below from raw long
 }
 metrics_uw_df <- do.call(rbind, metrics_uw)
+metrics_ci_df <- do.call(rbind, metrics_ci)
 nearfar_df    <- do.call(rbind, nearfar)
 qc_df         <- do.call(rbind, qc_by_year)
 
@@ -245,45 +348,138 @@ if (all(!is.na(Wi))) {
     ratio_var <- function(xf, yf) {   # xf,yf: named-by-stratum fractions (numerator/denominator indicators)
       X <- sum(sapply(strata, function(st) Wv[[st]] * xf[[st]]))
       Y <- sum(sapply(strata, function(st) Wv[[st]] * yf[[st]]))
-      if (Y == 0) return(c(R = NA, V = NA))
+      if (is.na(Y) || Y == 0) return(c(R = NA_real_, V = NA_real_))
       R <- X / Y
       V <- 0
       for (st in strata) {
-        if (nh[st] < 2) next
+        # nh[[st]] (not nh[st]): single-bracket keeps the stratum name, which
+        # then rides along into V and turns c(R=, V=) into c(R=, V.3=) — the
+        # same name-propagation trap as the safe() bug fixed on 2026-07-27.
+        nhs <- nh[[st]]
+        if (nhs < 2) next
         xh <- xf[[st]]; yh <- yf[[st]]
-        vx <- xh * (1 - xh) / (nh[st] - 1)
-        vy <- yh * (1 - yh) / (nh[st] - 1)
-        cxy <- (xh - xh * yh) / (nh[st] - 1)   # x subset of y => E[xy]=E[x]
+        vx <- xh * (1 - xh) / (nhs - 1)
+        vy <- yh * (1 - yh) / (nhs - 1)
+        cxy <- (xh - xh * yh) / (nhs - 1)      # x subset of y => E[xy]=E[x]
         V <- V + Wv[[st]]^2 * (vx + R^2 * vy - 2 * R * cxy)
       }
-      c(R = R, V = V / Y^2)
+      c(R = unname(R), V = unname(V / Y^2))
     }
     getf <- function(st, cell) if (is.null(fr[[st]])) 0 else unname(fr[[st]][cell])
-    xf_UAret <- setNames(lapply(strata, getf, "TP"), strata)
-    yf_UAret <- setNames(lapply(strata, function(st) getf(st,"TP") + getf(st,"FP")), strata)
-    xf_PAret <- setNames(lapply(strata, getf, "TP"), strata)
-    yf_PAret <- setNames(lapply(strata, function(st) getf(st,"TP") + getf(st,"FN")), strata)
-    v_UAret <- ratio_var(xf_UAret, yf_UAret)
-    v_PAret <- ratio_var(xf_PAret, yf_PAret)
-    ci <- function(est, v) if (is.na(v)) c(NA, NA) else est + c(-1, 1) * z * sqrt(max(v, 0))
+    # numerator / denominator indicator fractions for each of the four ratios
+    sumf <- function(...) { cells <- c(...); setNames(lapply(strata, function(st)
+      sum(vapply(cells, function(cl) getf(st, cl), 0))), strata) }
+    v_UAret <- ratio_var(sumf("TP"), sumf("TP", "FP"))
+    v_PAret <- ratio_var(sumf("TP"), sumf("TP", "FN"))
+    v_UAnor <- ratio_var(sumf("TN"), sumf("TN", "FN"))
+    v_PAnor <- ratio_var(sumf("TN"), sumf("TN", "FP"))
+    seOA <- sqrt(max(vOA, 0))
+    # SE / CI of a ratio; the CE/OE complement (1 - R) keeps the same SE and has
+    # its bounds mirrored, so it is derived rather than re-estimated.
+    se_of <- function(v) if (is.na(v[["V"]])) NA_real_ else sqrt(max(v[["V"]], 0))
+    ci    <- function(est, v) { s <- se_of(v)
+      if (is.na(s) || is.na(est)) c(NA_real_, NA_real_) else est + c(-1, 1) * z * s }
+    cUAret <- ci(UA_ret, v_UAret); cPAret <- ci(PA_ret, v_PAret)
+    cUAnor <- ci(UA_nor, v_UAnor); cPAnor <- ci(PA_nor, v_PAnor)
     ol[[as.character(yr)]] <- data.frame(
       year = yr,
-      OA = OA, OA_lo = OA - z*sqrt(vOA), OA_hi = OA + z*sqrt(vOA),
-      UA_retama = UA_ret, UA_retama_lo = ci(UA_ret, v_UAret["V"])[1], UA_retama_hi = ci(UA_ret, v_UAret["V"])[2],
-      PA_retama = PA_ret, PA_retama_lo = ci(PA_ret, v_PAret["V"])[1], PA_retama_hi = ci(PA_ret, v_PAret["V"])[2],
-      CE_retama = 1 - UA_ret, OE_retama = 1 - PA_ret,
-      UA_noret = UA_nor, PA_noret = PA_nor,
-      CE_noret = 1 - UA_nor, OE_noret = 1 - PA_nor, row.names = NULL)
+      OA = OA, OA_se = seOA, OA_lo = OA - z*seOA, OA_hi = OA + z*seOA,
+      UA_retama = UA_ret, UA_retama_se = se_of(v_UAret), UA_retama_lo = cUAret[1], UA_retama_hi = cUAret[2],
+      PA_retama = PA_ret, PA_retama_se = se_of(v_PAret), PA_retama_lo = cPAret[1], PA_retama_hi = cPAret[2],
+      UA_noret  = UA_nor, UA_noret_se  = se_of(v_UAnor), UA_noret_lo  = cUAnor[1], UA_noret_hi  = cUAnor[2],
+      PA_noret  = PA_nor, PA_noret_se  = se_of(v_PAnor), PA_noret_lo  = cPAnor[1], PA_noret_hi  = cPAnor[2],
+      # commission / omission = 1 - UA / 1 - PA  (same SE, mirrored bounds)
+      CE_retama = 1 - UA_ret, CE_retama_se = se_of(v_UAret), CE_retama_lo = 1 - cUAret[2], CE_retama_hi = 1 - cUAret[1],
+      OE_retama = 1 - PA_ret, OE_retama_se = se_of(v_PAret), OE_retama_lo = 1 - cPAret[2], OE_retama_hi = 1 - cPAret[1],
+      CE_noret  = 1 - UA_nor, CE_noret_se  = se_of(v_UAnor), CE_noret_lo  = 1 - cUAnor[2], CE_noret_hi  = 1 - cUAnor[1],
+      OE_noret  = 1 - PA_nor, OE_noret_se  = se_of(v_PAnor), OE_noret_lo  = 1 - cPAnor[2], OE_noret_hi  = 1 - cPAnor[1],
+      row.names = NULL)
     # area of retama (proportion) + CI (stratified proportion estimator)
     Aret <- sum(sapply(strata, function(st) Wv[[st]] * ph_refret[st]))
     vA <- sum(sapply(strata, function(st) if (nh[st] > 1)
       Wv[[st]]^2 * ph_refret[st] * (1 - ph_refret[st]) / (nh[st] - 1) else 0))
     ar[[as.character(yr)]] <- data.frame(year = yr,
-      area_prop_retama = Aret, area_lo = Aret - z*sqrt(vA), area_hi = Aret + z*sqrt(vA),
+      area_prop_retama = Aret, area_se = sqrt(max(vA, 0)),
+      area_lo = Aret - z*sqrt(vA), area_hi = Aret + z*sqrt(vA),
       row.names = NULL)
   }
   olofsson_df      <- do.call(rbind, ol)
   olofsson_area_df <- do.call(rbind, ar)
+}
+
+# ---- 5b. DESIGN CHECK: achieved precision vs. the sample-size design ---------
+# 09v_valGenerator.js sized each stratum with the Olofsson rule
+#     n_i = U_i (1 - U_i) / SE_i^2      (floored at FLOOR_i = 100)
+# using EXP_UA = {.80, .80, .95} and TARGET_SE = {.02, .02, .02}, which is why
+# 400 / 400 / 119 points were drawn. This block asks whether the data actually
+# delivers that precision, separating the two ways it can fail:
+#   (a) LABELS INCOMPLETE — fewer points evaluated than drawn, so n_h < n_drawn.
+#       `se_at_n_drawn` is the precision once every assigned label is loaded.
+#   (b) ACCURACY DIFFERS FROM THE ASSUMPTION — if the realized p_h is further
+#       from 0 or 1 than EXP_UA, p(1-p) is larger and the target SE needs more
+#       points than the design bought, however complete the loading is.
+# p_h = the stratum's proportion of correctly classified points (map == ref):
+# the same quantity that enters the OA variance, and the realized analogue of
+# the U_i the design assumed. Needs no Wi, so it runs even without area weights.
+DESIGN <- data.frame(
+  stratum   = 1:3,
+  label     = c("S1 mapped-retama", "S2 near background", "S3 far background"),
+  exp_UA    = c(0.80, 0.80, 0.95),   # EXP_UA    in 09v_valGenerator.js sec. 0
+  target_SE = c(0.02, 0.02, 0.02),   # TARGET_SE in 09v_valGenerator.js sec. 0
+  floor_n   = c(100L, 100L, 100L),   # FLOOR     in 09v_valGenerator.js sec. 0
+  n_drawn   = as.integer(table(factor(mk$stratum, levels = 1:3))),
+  stringsAsFactors = FALSE)
+DESIGN$n_formula <- ceiling(DESIGN$exp_UA * (1 - DESIGN$exp_UA) / DESIGN$target_SE^2)
+DESIGN$n_design  <- pmax(DESIGN$n_formula, DESIGN$floor_n)
+
+design_rows <- list()
+for (yr in YEARS) {
+  uy <- usable[usable$year == yr, ]
+  for (i in seq_len(nrow(DESIGN))) {
+    st <- DESIGN$stratum[i]
+    s  <- uy[uy$stratum == st, ]
+    nl <- nrow(s)
+    p  <- if (nl > 0) mean(s$map == s$ref) else NA_real_
+    se_now   <- if (nl > 0) sqrt(p * (1 - p) / nl) else NA_real_
+    se_full  <- if (nl > 0) sqrt(p * (1 - p) / DESIGN$n_drawn[i]) else NA_real_
+    # points the realized p_h would require to hit the target SE
+    n_req    <- if (nl > 0) ceiling(p * (1 - p) / DESIGN$target_SE[i]^2) else NA_real_
+    design_rows[[length(design_rows) + 1]] <- data.frame(
+      year = yr, stratum = st, label = DESIGN$label[i],
+      exp_UA = DESIGN$exp_UA[i], obs_p_correct = p,
+      target_SE = DESIGN$target_SE[i],
+      n_design = DESIGN$n_design[i], n_drawn = DESIGN$n_drawn[i], n_loaded = nl,
+      pct_loaded = if (DESIGN$n_drawn[i] > 0) nl / DESIGN$n_drawn[i] else NA_real_,
+      se_achieved = se_now, se_at_n_drawn = se_full,
+      se_ratio_vs_target = if (is.na(se_now)) NA_real_ else se_now / DESIGN$target_SE[i],
+      n_required_at_obs_p = n_req,
+      meets_target_now  = !is.na(se_now)  && se_now  <= DESIGN$target_SE[i],
+      meets_target_full = !is.na(se_full) && se_full <= DESIGN$target_SE[i],
+      row.names = NULL)
+  }
+}
+design_df <- do.call(rbind, design_rows)
+
+# OA-level design check (needs Wi: SE(OA) is an area-weighted combination).
+# se_OA_design = the value 09v_valGenerator.js prints as "SE(OA) achieved given
+# nFinal" — the design's own promise, computed from EXP_UA at the drawn n.
+design_oa_df <- NULL
+if (all(!is.na(Wi))) {
+  Wv <- c(Wi[["S1"]], Wi[["S2"]], Wi[["S3"]])
+  se_oa_design <- sqrt(sum(Wv^2 * DESIGN$exp_UA * (1 - DESIGN$exp_UA) / DESIGN$n_drawn))
+  design_oa_df <- do.call(rbind, lapply(YEARS, function(yr) {
+    d  <- design_df[design_df$year == yr, ]
+    ob <- olofsson_df[olofsson_df$year == yr, ]
+    # SE(OA) the realized p_h would give at full loading
+    se_full <- sqrt(sum(Wv^2 * d$obs_p_correct * (1 - d$obs_p_correct) / d$n_drawn,
+                        na.rm = TRUE))
+    data.frame(year = yr,
+      se_OA_design = se_oa_design,          # promised by the design
+      se_OA_achieved = ob$OA_se,            # from the data as loaded now
+      se_OA_at_full_loading = se_full,      # projected once all labels are in
+      ratio_achieved_vs_design = ob$OA_se / se_oa_design,
+      row.names = NULL)
+  }))
 }
 
 # ---- 6. INTER-OBSERVER (paired points only) ---------------------------------
@@ -548,6 +744,10 @@ for (yr in YEARS) {
             file.path(OUT_DIR, sprintf("09v_perStratum_%d.csv", yr)), row.names = FALSE)
 }
 write.csv(metrics_uw_df, file.path(OUT_DIR, "09v_metrics_unweighted.csv"), row.names = FALSE)
+write.csv(metrics_ci_df, file.path(OUT_DIR, "09v_metrics_unweighted_ci.csv"), row.names = FALSE)
+write.csv(design_df,     file.path(OUT_DIR, "09v_designCheck_perStratum.csv"), row.names = FALSE)
+if (!is.null(design_oa_df))
+  write.csv(design_oa_df, file.path(OUT_DIR, "09v_designCheck_OA.csv"), row.names = FALSE)
 write.csv(nearfar_df,    file.path(OUT_DIR, "09v_nearfar_noretama.csv"),   row.names = FALSE)
 write.csv(kappa_df,      file.path(OUT_DIR, "09v_kappa.csv"),              row.names = FALSE)
 write.csv(qc_df,         file.path(OUT_DIR, "09v_qc.csv"),                 row.names = FALSE)
@@ -582,26 +782,65 @@ for (yr in YEARS) {
             cc["TP"], cc["FP"], cc["FN"], cc["TN"], sum(cc)),
     sprintf("QC: disagreements discarded=%d | conf0 labels excluded=%d",
             q$n_disagree, q$n_conf0_excluded),
-    "Crude (sample-based):",
-    sprintf("  OA = %s", fmt(m$OA)),
-    sprintf("  Retama:    commission(CE)=%s  omission(OE)=%s  (UA=%s PA=%s)",
-            fmt(m$CE_retama), fmt(m$OE_retama), fmt(m$UA_retama), fmt(m$PA_retama)),
-    sprintf("  No_retama: commission(CE)=%s  omission(OE)=%s  (UA=%s PA=%s)",
-            fmt(m$CE_noret), fmt(m$OE_noret), fmt(m$UA_noret), fmt(m$PA_noret)),
-    sprintf("  No_retama near/far: CE_near=%s (n=%d)  CE_far=%s (n=%d) | OE_near=%s  OE_far=%s",
-            fmt(m$CE_noret_near), m$n_near, fmt(m$CE_noret_far), m$n_far,
-            fmt(m$OE_noret_near), fmt(m$OE_noret_far)),
+    "Crude (sample-based, Wilson 95% CI, unweighted):",
     "")
+  ciy <- metrics_ci_df[metrics_ci_df$year == yr, ]
+  for (i in seq_len(nrow(ciy))) dg <- c(dg, sprintf(
+    "  %-14s = %s [%s, %s]  (SE=%s; k=%d/n=%d)",
+    ciy$metric[i], fmt(ciy$est[i]), fmt(ciy$lo[i]), fmt(ciy$hi[i]),
+    fmt(ciy$se[i], 4), ciy$k[i], ciy$n[i]))
+  dg <- c(dg, "")
   if (!is.null(olofsson_df)) {
     o <- olofsson_df[olofsson_df$year == yr, ]; a <- olofsson_area_df[olofsson_area_df$year == yr, ]
-    dg <- c(dg, "Olofsson (area-weighted):",
-      sprintf("  OA = %s [%s, %s]", fmt(o$OA), fmt(o$OA_lo), fmt(o$OA_hi)),
-      sprintf("  Retama:    CE=%s OE=%s  UA=%s [%s,%s]  PA=%s [%s,%s]",
-              fmt(o$CE_retama), fmt(o$OE_retama), fmt(o$UA_retama), fmt(o$UA_retama_lo),
-              fmt(o$UA_retama_hi), fmt(o$PA_retama), fmt(o$PA_retama_lo), fmt(o$PA_retama_hi)),
-      sprintf("  Area(retama) proportion = %s [%s, %s]", fmt(a$area_prop_retama), fmt(a$area_lo), fmt(a$area_hi)),
+    dg <- c(dg, "Olofsson (area-weighted, 95% CI, SE from the stratified variance):",
+      sprintf("  OA         = %s [%s, %s]  (SE=%s)", fmt(o$OA), fmt(o$OA_lo), fmt(o$OA_hi), fmt(o$OA_se, 4)),
+      sprintf("  UA_retama  = %s [%s, %s]  (SE=%s)   CE_retama = %s [%s, %s]",
+              fmt(o$UA_retama), fmt(o$UA_retama_lo), fmt(o$UA_retama_hi), fmt(o$UA_retama_se, 4),
+              fmt(o$CE_retama), fmt(o$CE_retama_lo), fmt(o$CE_retama_hi)),
+      sprintf("  PA_retama  = %s [%s, %s]  (SE=%s)   OE_retama = %s [%s, %s]",
+              fmt(o$PA_retama), fmt(o$PA_retama_lo), fmt(o$PA_retama_hi), fmt(o$PA_retama_se, 4),
+              fmt(o$OE_retama), fmt(o$OE_retama_lo), fmt(o$OE_retama_hi)),
+      sprintf("  UA_noret   = %s [%s, %s]  (SE=%s)   CE_noret  = %s [%s, %s]",
+              fmt(o$UA_noret), fmt(o$UA_noret_lo), fmt(o$UA_noret_hi), fmt(o$UA_noret_se, 4),
+              fmt(o$CE_noret), fmt(o$CE_noret_lo), fmt(o$CE_noret_hi)),
+      sprintf("  PA_noret   = %s [%s, %s]  (SE=%s)   OE_noret  = %s [%s, %s]",
+              fmt(o$PA_noret), fmt(o$PA_noret_lo), fmt(o$PA_noret_hi), fmt(o$PA_noret_se, 4),
+              fmt(o$OE_noret), fmt(o$OE_noret_lo), fmt(o$OE_noret_hi)),
+      sprintf("  Area(retama) proportion = %s [%s, %s]  (SE=%s)",
+              fmt(a$area_prop_retama), fmt(a$area_lo), fmt(a$area_hi), fmt(a$area_se, 4)),
       "")
   }
+}
+
+# --- design check: achieved precision vs. what the sampling design promised ---
+dg <- c(dg, "## Design check — achieved SE vs. Olofsson target SE",
+  sprintf("Design (09v_valGenerator.js): EXP_UA = %s | TARGET_SE = %s | FLOOR = %s",
+          paste(DESIGN$exp_UA, collapse = "/"), paste(DESIGN$target_SE, collapse = "/"),
+          paste(DESIGN$floor_n, collapse = "/")),
+  sprintf("n: formula = %s -> design = %s -> actually drawn = %s",
+          paste(DESIGN$n_formula, collapse = "/"), paste(DESIGN$n_design, collapse = "/"),
+          paste(DESIGN$n_drawn, collapse = "/")),
+  "")
+for (yr in YEARS) {
+  dg <- c(dg, sprintf("### %d (per stratum)", yr))
+  d <- design_df[design_df$year == yr, ]
+  for (i in seq_len(nrow(d))) dg <- c(dg, sprintf(
+    "  %-19s n %d/%d loaded (%s%%) | p_correct=%s (design assumed %s) | SE now=%s (%sx target %s) | SE at full n=%s | n needed at observed p=%s | target met now/full: %s/%s",
+    d$label[i], d$n_loaded[i], d$n_drawn[i], fmt(100 * d$pct_loaded[i], 0),
+    fmt(d$obs_p_correct[i]), fmt(d$exp_UA[i], 2), fmt(d$se_achieved[i], 4),
+    fmt(d$se_ratio_vs_target[i], 2), fmt(d$target_SE[i], 2),
+    fmt(d$se_at_n_drawn[i], 4), d$n_required_at_obs_p[i],
+    ifelse(d$meets_target_now[i], "YES", "no"), ifelse(d$meets_target_full[i], "YES", "no")))
+  if (!is.null(design_oa_df)) {
+    o <- design_oa_df[design_oa_df$year == yr, ]
+    dg <- c(dg, sprintf(
+      "  OA: SE design=%s | SE achieved=%s (%sx design) | SE at full loading=%s",
+      fmt(o$se_OA_design, 4), fmt(o$se_OA_achieved, 4),
+      fmt(o$ratio_achieved_vs_design, 2), fmt(o$se_OA_at_full_loading, 4)))
+  } else {
+    dg <- c(dg, "  OA: SE(OA) comparison needs Wi (area weights) — not set, skipped.")
+  }
+  dg <- c(dg, "")
 }
 for (yr in YEARS) {
   k <- kappa_df[kappa_df$year == yr, ]
