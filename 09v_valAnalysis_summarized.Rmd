@@ -1,0 +1,230 @@
+---
+title: "Validación independiente del mapa de retama — resumen"
+subtitle: "Métricas 2017 y 2025 (versión condensada)"
+date: "`r format(Sys.Date())`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    df_print: kable
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
+                      fig.align = "center")
+source(file.path("D:/Lican/uni/Investigacion/Colaboraciones_y_ayudas/Retamap",
+                 "gee_scripts", "09v_valAnalysis_compute.R"))
+library(knitr)
+pct  <- function(x) ifelse(is.na(x), "\u2014", sprintf("%.1f%%", 100 * as.numeric(x)))
+num3 <- function(x) ifelse(is.na(x), "\u2014", formatC(as.numeric(x), format = "f", digits = 3))
+num4 <- function(x) ifelse(is.na(x), "\u2014", formatC(as.numeric(x), format = "f", digits = 4))
+pctci <- function(e, lo, hi) ifelse(is.na(e), "\u2014",
+  sprintf("%.1f%% [%.1f, %.1f]", 100*as.numeric(e), 100*as.numeric(lo), 100*as.numeric(hi)))
+ci_of <- function(metric, yr) {
+  r <- metrics_ci_df[metrics_ci_df$metric == metric & metrics_ci_df$year == yr, ]
+  if (!nrow(r)) return("\u2014")
+  pctci(r$est, r$lo, r$hi)
+}
+o17 <- olofsson_df[olofsson_df$year == 2017, ]; o25 <- olofsson_df[olofsson_df$year == 2025, ]
+a17 <- olofsson_area_df[olofsson_area_df$year == 2017, ]
+a25 <- olofsson_area_df[olofsson_area_df$year == 2025, ]
+ps17 <- perstratum[["2017"]]; ps25 <- perstratum[["2025"]]
+fn_s2_17 <- ps17$FN[ps17$stratum == 2]; fn_s2_25 <- ps25$FN[ps25$stratum == 2]
+```
+
+# Qué se hizo
+
+Validación del mapa final `08_RF2_prediction` para **2017 y 2025** contra una **referencia
+independiente** (foto-interpretación humana, 3 validadores), con muestreo estratificado por el
+propio mapa (Olofsson et al. 2014).
+
+- **Estratos** (parten todo el ROI, cada uno con su peso de área Wᵢ):
+  **S1** = mapa-retama (`r sum(mk$stratum==1)` pts, Wᵢ = `r pct(Wi[["S1"]])`);
+  **S2** = no-retama cercano, dentro de ~1 km de retama mapeada (`r sum(mk$stratum==2)` pts,
+  `r pct(Wi[["S2"]])`); **S3** = no-retama lejano (`r sum(mk$stratum==3)` pts,
+  `r pct(Wi[["S3"]])`).
+- **Referencia:** la etiqueta del validador. S1 va a **2 validadores** (consenso; si difieren, el
+  punto se descarta ese año) y S2/S3 a **1**. El **mapa es lo evaluado**: si mapa y referencia
+  difieren, el error es del mapa.
+- **Dos lecturas de las métricas:** *crudas* (cada punto pesa igual → describen la muestra) y
+  *ponderadas por área* (estimador de Olofsson → inferencia al ROI). Todas con **IC 95%**
+  (Wilson en las crudas, varianza estratificada en las ponderadas).
+- **Estado de carga:** Sofi `r sum(sheets$validator=="sofi")`/540 y Jaime
+  `r sum(sheets$validator=="jaime")`/389 completos; Lican `r sum(sheets$validator=="lican")`/390
+  (falta casi todo S1 par-validado).
+
+# Resultados principales
+
+- **Comisión de retama:** `r pctci(o17$CE_retama, o17$CE_retama_lo, o17$CE_retama_hi)` (2017) y
+  `r pctci(o25$CE_retama, o25$CE_retama_lo, o25$CE_retama_hi)` (2025), ponderada.
+- **Omisión de retama:** `r pctci(o17$OE_retama, o17$OE_retama_lo, o17$OE_retama_hi)` (2017) y
+  `r pctci(o25$OE_retama, o25$OE_retama_lo, o25$OE_retama_hi)` (2025) — **~2,5× la omisión cruda**
+  (`r ci_of("OE_retama", 2017)` / `r ci_of("OE_retama", 2025)`), porque la retama omitida en S2
+  representa mucha más superficie. El mapa detecta bien las manchas consolidadas y se pierde la
+  retama dispersa o incipiente del entorno.
+- **Área de retama:** `r pctci(a17$area_prop_retama, a17$area_lo, a17$area_hi)` del ROI en 2017 y
+  `r pctci(a25$area_prop_retama, a25$area_lo, a25$area_hi)` en 2025 — **indistinguibles entre sí**.
+- **Fondo lejano (S3):** comisión **0%** en ambos años (`r ci_of("CE_noret_far", 2017)`); el dato
+  descarta una comisión mayor a ~3,6%, no cualquier comisión.
+- **Exactitud global ponderada:** `r pctci(o17$OA, o17$OA_lo, o17$OA_hi)` — **no citable como
+  logro**: el `r pct(Wi[["S3"]])` del ROI es fondo trivial y domina el promedio.
+- **Kappa inter-observador:** `r num3(kappa_df$kappa[1])` (2017) / `r num3(kappa_df$kappa[2])`
+  (2025) sobre `r kappa_df$n_pairs[1]` pares — concordancia moderada.
+
+# Métricas crudas
+
+```{r qc-table}
+qc_show <- qc_df[, c("year", "n_usable", "n_disagree", "n_single_design",
+                     "n_single_partial", "n_conf0_excluded")]
+names(qc_show) <- c("Año", "N usable", "Desacuerdos descartados",
+                    "1 validador (diseño)", "1 validador (par sin completar)",
+                    "Excluidos por conf=0")
+kable(qc_show, caption = "Puntos que entran en las métricas, por año.")
+```
+
+```{r conf-tables, results='asis'}
+for (yr in YEARS) {
+  cc <- conf_by_year[[as.character(yr)]]
+  cm <- data.frame(
+    ` ` = c("**mapa: Retama**", "**mapa: No_retama**"),
+    `ref: Retama`    = c(cc["TP"], cc["FN"]),
+    `ref: No_retama` = c(cc["FP"], cc["TN"]),
+    check.names = FALSE)
+  cat(knitr::kable(cm, caption = sprintf("Matriz de confusión %d.", yr)), sep = "\n")
+  cat("\n\n")
+}
+```
+
+```{r metrics-table}
+MET <- c(OA = "Exactitud global (OA)",
+         CE_retama = "Retama — comisión (CE)",  OE_retama = "Retama — omisión (OE)",
+         UA_retama = "Retama — user's acc. (UA)", PA_retama = "Retama — producer's acc. (PA)",
+         CE_noret  = "No-retama — comisión (CE)", OE_noret = "No-retama — omisión (OE)")
+disp <- data.frame(
+  Métrica = unname(MET),
+  `n` = sapply(names(MET), function(m)
+        metrics_ci_df$n[metrics_ci_df$metric == m & metrics_ci_df$year == YEARS[1]]),
+  `2017 (IC95%)` = sapply(names(MET), ci_of, yr = YEARS[1]),
+  `2025 (IC95%)` = sapply(names(MET), ci_of, yr = YEARS[2]),
+  check.names = FALSE, row.names = NULL)
+kable(disp, caption = "Métricas crudas con IC de Wilson 95%. n es el denominador en 2017 (varía según la métrica).")
+```
+
+Comisión y omisión de retama son del mismo orden y sus intervalos se solapan: la muestra **no
+sostiene** un sesgo hacia sobre- o sub-marcar.
+
+## Error del no-retama: cercano vs lejano
+
+```{r nearfar-table}
+nf <- nearfar_df
+nf_disp <- data.frame(
+  Año  = nf$year,
+  Zona = ifelse(nf$zone == "near", "near (S2 + S1 año apagado)", "far (S3)"),
+  `n` = nf$n,
+  `Ref. retama (FN)` = nf$FN,
+  `Ref. no-retama (TN)` = nf$TN,
+  `Comisión (IC95%)` = mapply(function(z, y)
+      ci_of(if (z == "near") "CE_noret_near" else "CE_noret_far", y), nf$zone, nf$year),
+  check.names = FALSE, row.names = NULL)
+kable(nf_disp, caption = "Comisión del no-retama por cercanía a la retama mapeada.")
+```
+
+El error se concentra por completo en la zona cercana (`r ci_of("CE_noret_near", 2017)` en 2017);
+en el fondo lejano es 0%. Los intervalos de *near* y *far* **no se solapan** en ningún año, así que
+el contraste que justifica la estratificación está respaldado.
+
+# Estimador de Olofsson (ponderado por área)
+
+```{r olofsson, results='asis'}
+o <- olofsson_df
+od <- data.frame(
+  Año = o$year,
+  `OA (IC95%)`        = pctci(o$OA, o$OA_lo, o$OA_hi),
+  `UA retama (IC95%)` = pctci(o$UA_retama, o$UA_retama_lo, o$UA_retama_hi),
+  `PA retama (IC95%)` = pctci(o$PA_retama, o$PA_retama_lo, o$PA_retama_hi),
+  `CE retama (IC95%)` = pctci(o$CE_retama, o$CE_retama_lo, o$CE_retama_hi),
+  `OE retama (IC95%)` = pctci(o$OE_retama, o$OE_retama_lo, o$OE_retama_hi),
+  check.names = FALSE, row.names = NULL)
+cat(knitr::kable(od, caption = "Clase retama, ponderado por área (IC95% por varianza estratificada, delta method)."), sep = "\n")
+cat("\n\n")
+a <- olofsson_area_df
+ad <- data.frame(Año = a$year,
+  `Proporción de área con retama (IC95%)` = pctci(a$area_prop_retama, a$area_lo, a$area_hi),
+  `SE` = num4(a$area_se), check.names = FALSE, row.names = NULL)
+cat(knitr::kable(ad, caption = "Área estimada de retama (estimador estratificado, no el conteo de píxeles del mapa)."), sep = "\n")
+```
+
+La comisión casi no cambia al ponderar (vive toda en S1). La **omisión sí se duplica largamente**:
+en 2017 hay `r fn_s2_17` puntos de S2 donde los validadores ven retama y el mapa no, y S2 pesa
+`r num3(Wi[["S2"]]/Wi[["S1"]])` veces más que S1 por unidad de muestra, así que representan casi
+tanta superficie omitida como los `r ps17$FN[ps17$stratum==1]` falsos negativos de S1.
+
+# Concordancia entre validadores
+
+```{r kappa-table}
+kd <- kappa_df
+kable(data.frame(
+  Año = kd$year, `Pares` = kd$n_pairs, `% acuerdo` = pct(kd$pct_agreement),
+  Kappa = num3(kd$kappa), `Ambos retama` = kd$both_retama, `Split` = kd$split,
+  `Ambos no-retama` = kd$both_noret, check.names = FALSE),
+  caption = "Acuerdo entre los dos evaluadores (puntos S1 con doble validación).")
+```
+
+Concordancia moderada (~`r num3(kappa_df$kappa[1])`). 2025 tiene más desacuerdos: los validadores
+anotan repetidamente que no hay imagen de alta resolución para ese año.
+
+```{r votegrid-2017, fig.width=11, fig.height=10.5, fig.cap="Voto de la referencia (filas) contra la clase del mapa (columnas) en cada combinación de confianzas, 2017. Banda inferior = puntos de un solo validador. Los 6 valores de cada bloque suman 100%; el tamaño del número es el n de la celda; azul = mapa acierta, rojo = mapa se equivoca, gris = sin consenso."}
+print(votegrid_plots[["2017"]])
+```
+
+```{r votegrid-2025, fig.width=11, fig.height=10.5, fig.cap="Ídem, 2025."}
+print(votegrid_plots[["2025"]])
+```
+
+Los aciertos se concentran donde ambos evaluadores declararon alta confianza, y los errores del
+mapa aparecen sobre todo en confianza intermedia. Entre años el rojo baja pero el gris (*sin
+consenso*, que se descarta de la matriz) sube: **parte del error de 2025 migró a "sin consenso"**,
+así que la mejora aparente no debe leerse como un mapa más exacto.
+
+# Precisión alcanzada vs. diseño
+
+```{r design-table}
+dd <- design_df
+kable(data.frame(
+  Año = dd$year, Estrato = dd$label,
+  `n cargado / sorteado` = sprintf("%d / %d", dd$n_loaded, dd$n_drawn),
+  `p correcto (asumido)` = sprintf("%s (%s)", num3(dd$obs_p_correct), num3(dd$exp_UA)),
+  `SE objetivo` = num3(dd$target_SE),
+  `SE alcanzado` = num4(dd$se_achieved),
+  `n necesario al p real` = dd$n_required_at_obs_p,
+  check.names = FALSE, row.names = NULL),
+  caption = "Precisión por estrato frente al objetivo del diseño (SE = 0.02).")
+```
+
+Los tres estratos cumplen el objetivo; S1 quedó bien dimensionado y S2/S3 muy holgados (su
+exactitud real es mucho mayor que la supuesta). **Pero eso optimiza la varianza de la OA**, que acá
+es la métrica menos informativa: bajo el criterio que importa —la omisión de retama, con el
+intervalo más ancho del reporte— S2 está **sub**-muestreado, no sobre-muestreado.
+
+# Limitaciones
+
+- Las **métricas crudas describen la muestra, no el territorio** (S1 y S2 están sobre-representados
+  a propósito); para el ROI valen las ponderadas.
+- La **OA ponderada (`r pct(o17$OA)`) no mide la calidad del mapa de retama** — está dominada por el
+  fondo lejano.
+- Los estratos con **cero errores aportan varianza exactamente cero**, así que los IC ponderados de
+  OA y no-retama son optimistas; el Wilson de las crudas es la lectura honesta de ese cero.
+- La **omisión ponderada descansa en `r fn_s2_17` (2017) y `r fn_s2_25` (2025) puntos de S2**:
+  el número más importante y el más frágil.
+- El **área no sirve para leer cambio** entre 2017 y 2025 (intervalos superpuestos; el diseño mide
+  exactitud, no transiciones).
+- **Carga incompleta en S1** (Lican `r sum(sheets$validator=="lican")`/390): los pares con ambos
+  observadores son `r kappa_df$n_pairs[1]`, no los `r length(pair_pxids)` totales.
+- **Desacuerdos descartados:** `r qc_df$n_disagree[1]` (2017) y `r qc_df$n_disagree[2]` (2025).
+
+---
+
+<small>Versión condensada de `09v_valAnalysis.Rmd`. Motor de cálculo:
+`09v_valAnalysis_compute.R`; tablas y figuras en `validation/analysis/`.</small>

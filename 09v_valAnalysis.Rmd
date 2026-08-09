@@ -21,6 +21,16 @@ source(file.path("D:/Lican/uni/Investigacion/Colaboraciones_y_ayudas/Retamap",
 library(knitr)
 pct  <- function(x) ifelse(is.na(x), "\u2014", sprintf("%.1f%%", 100 * as.numeric(x)))
 num3 <- function(x) ifelse(is.na(x), "\u2014", formatC(as.numeric(x), format = "f", digits = 3))
+num4 <- function(x) ifelse(is.na(x), "\u2014", formatC(as.numeric(x), format = "f", digits = 4))
+# "12.3% [8.1, 17.9]" \u2014 point estimate with its 95% interval
+pctci <- function(e, lo, hi) ifelse(is.na(e), "\u2014",
+  sprintf("%.1f%% [%.1f, %.1f]", 100*as.numeric(e), 100*as.numeric(lo), 100*as.numeric(hi)))
+# pull a crude metric + its Wilson interval straight from the tidy CI table
+ci_of <- function(metric, yr) {
+  r <- metrics_ci_df[metrics_ci_df$metric == metric & metrics_ci_df$year == yr, ]
+  if (!nrow(r)) return("\u2014")
+  pctci(r$est, r$lo, r$hi)
+}
 ```
 
 # Resumen ejecutivo
@@ -43,19 +53,49 @@ oa17 <- metrics_uw_df$OA[metrics_uw_df$year == 2017]
 oa25 <- metrics_uw_df$OA[metrics_uw_df$year == 2025]
 ```
 
-- **Exactitud global (cruda):** `r pct(oa17)` en 2017 y `r pct(oa25)` en 2025.
-- **Retama** — comisión (sobre-detección) ~`r pct(metrics_uw_df$CE_retama[1])`/`r pct(metrics_uw_df$CE_retama[2])`
-  y omisión (retama no detectada) ~`r pct(metrics_uw_df$OE_retama[1])`/`r pct(metrics_uw_df$OE_retama[2])`
-  (2017/2025).
-- **No-retama lejano (S3):** comisión = **0%** en ambos años en la muestra — respalda el
-  supuesto de diseño de que fuera del entorno de la retama el mapa prácticamente no confunde.
-- **Concordancia inter-observador (kappa):** `r num3(kappa_df$kappa[1])` (2017) y
-  `r num3(kappa_df$kappa[2])` (2025) sobre los puntos con doble validación.
+Todas las estimaciones se reportan con su **intervalo de confianza del 95%**. Para las métricas
+crudas es un intervalo **de Wilson** (cada métrica es "k aciertos sobre n ensayos"); a diferencia
+de la aproximación normal, no se sale de [0, 1] y sigue dando una cota superior útil cuando el
+conteo es 0 — que es justamente el caso del estrato lejano. Para el estimador de Olofsson (§7) el
+intervalo sale de la varianza estratificada ponderada por área.
 
-> **Provisorio.** La carga de validación está incompleta (Lican y Jaime a mitad de camino;
-> los ~100 puntos recién transferidos a Sofi todavía no bajados) y las métricas son **crudas**
-> (sin ponderar por área). El estimador de Olofsson ponderado se activa al cargar los pesos
-> Wᵢ (ver §6). Interpretar como una foto preliminar, no como los números finales del paper.
+```{r exec-olof, include=FALSE}
+o17 <- olofsson_df[olofsson_df$year == 2017, ]; o25 <- olofsson_df[olofsson_df$year == 2025, ]
+a17 <- olofsson_area_df[olofsson_area_df$year == 2017, ]
+a25 <- olofsson_area_df[olofsson_area_df$year == 2025, ]
+```
+
+- **Comisión de retama (sobre-detección):** `r pctci(o17$CE_retama, o17$CE_retama_lo, o17$CE_retama_hi)`
+  en 2017 y `r pctci(o25$CE_retama, o25$CE_retama_lo, o25$CE_retama_hi)` en 2025 (ponderado por
+  área; prácticamente igual al crudo, porque depende casi solo de S1).
+- **Omisión de retama (retama no detectada):**
+  `r pctci(o17$OE_retama, o17$OE_retama_lo, o17$OE_retama_hi)` en 2017 y
+  `r pctci(o25$OE_retama, o25$OE_retama_lo, o25$OE_retama_hi)` en 2025. **Este es el resultado
+  más importante del reporte y solo aparece al ponderar por área:** la omisión cruda
+  (`r ci_of("OE_retama", 2017)` / `r ci_of("OE_retama", 2025)`) la subestima por un factor de
+  ~2,5, porque los pocos puntos de retama omitida que caen en el fondo cercano representan mucha
+  más superficie que los aciertos concentrados en S1. Ver §7.
+- **Área de retama estimada:** `r pctci(a17$area_prop_retama, a17$area_lo, a17$area_hi)` del ROI
+  en 2017 y `r pctci(a25$area_prop_retama, a25$area_lo, a25$area_hi)` en 2025 — estadísticamente
+  indistinguibles entre sí.
+- **Exactitud global:** `r pctci(o17$OA, o17$OA_lo, o17$OA_hi)` ponderada, contra
+  `r ci_of("OA", 2017)` cruda. **La OA ponderada no es un número informativo acá** y no debería
+  citarse como logro: el 93,5% del ROI es fondo lejano trivialmente no-retama, así que domina el
+  promedio. Las métricas que importan son UA/PA de la clase retama.
+- **No-retama lejano (S3):** comisión = **0%** en ambos años en la muestra
+  (`r ci_of("CE_noret_far", 2017)`). El cero es *muestral*: con
+  `r metrics_ci_df$n[metrics_ci_df$metric=="CE_noret_far" & metrics_ci_df$year==2017]` puntos, lo
+  que el dato descarta es una comisión mayor a ~3,6%, no cualquier comisión.
+- **Concordancia inter-observador (kappa):** `r num3(kappa_df$kappa[1])` (2017) y
+  `r num3(kappa_df$kappa[2])` (2025) sobre `r kappa_df$n_pairs[1]` pares.
+- **Precisión alcanzada vs. la de diseño (§6):** los tres estratos **cumplen** el objetivo de
+  SE = 0.02, pero por mucho más margen del previsto en S2/S3 — el diseño resultó conservador.
+
+> **Provisorio en un punto:** Sofi (`r sum(sheets$validator=="sofi")`/540) y Jaime
+> (`r sum(sheets$validator=="jaime")`/389) completaron su lote; Lican va
+> `r sum(sheets$validator=="lican")`/390 (`r pct(sum(sheets$validator=="lican")/390)`). Los pesos
+> de área Wᵢ ya están cargados, así que el estimador de Olofsson (§7) está activo. Falta terminar
+> la carga de Lican, concentrada en S1.
 
 # Datos y método
 
@@ -89,9 +129,12 @@ kable(qc_show, caption = "Control de calidad por año. \"N usable\" = puntos que
 ```
 
 <!-- AGENT_INTERP:data -->
-El estado de carga es asimétrico: Sofi aportó la mayor parte de las etiquetas
-(`r sum(sheets$validator=="sofi")` filas, su lote original completo), mientras que Lican y
-Jaime están a mitad de su lista. Es importante notar que **nadie utilizó `confianza = 0`**:
+El estado de carga es asimétrico: Sofi (`r sum(sheets$validator=="sofi")`/540) y Jaime
+(`r sum(sheets$validator=="jaime")`/389) terminaron sus lotes completos, mientras que Lican va por
+`r sum(sheets$validator=="lican")`/390 (`r pct(sum(sheets$validator=="lican")/390)`). Lo que falta
+es, casi en su totalidad, el estrato S1 con doble validación, así que la carga pendiente afecta
+sobre todo al kappa y a la precisión de las métricas de retama, no a la cobertura de S2/S3.
+Es importante notar que **nadie utilizó `confianza = 0`**:
 ante la duda, los evaluadores prefirieron asignar una clase con confianza baja (2–3) antes que
 declarar el punto indeterminable, por lo que no se excluyó ninguna fila por ese criterio y la
 incertidumbre queda registrada en el eje de confianza, no como faltante.
@@ -122,30 +165,40 @@ for (yr in YEARS) {
 ```
 
 ```{r metrics-table}
-mt <- metrics_uw_df
+MET <- c(OA = "Exactitud global (OA)",
+         CE_retama = "Retama — comisión (CE)",  OE_retama = "Retama — omisión (OE)",
+         UA_retama = "Retama — user's acc. (UA)", PA_retama = "Retama — producer's acc. (PA)",
+         CE_noret  = "No-retama — comisión (CE)", OE_noret = "No-retama — omisión (OE)")
 disp <- data.frame(
-  Métrica = c("Exactitud global (OA)",
-              "Retama — comisión (CE)", "Retama — omisión (OE)",
-              "Retama — user's acc. (UA)", "Retama — producer's acc. (PA)",
-              "No-retama — comisión (CE)", "No-retama — omisión (OE)"),
-  `2017` = c(pct(mt$OA[1]), pct(mt$CE_retama[1]), pct(mt$OE_retama[1]),
-             pct(mt$UA_retama[1]), pct(mt$PA_retama[1]),
-             pct(mt$CE_noret[1]), pct(mt$OE_noret[1])),
-  `2025` = c(pct(mt$OA[2]), pct(mt$CE_retama[2]), pct(mt$OE_retama[2]),
-             pct(mt$UA_retama[2]), pct(mt$PA_retama[2]),
-             pct(mt$CE_noret[2]), pct(mt$OE_noret[2])),
-  check.names = FALSE)
-kable(disp, caption = "Métricas crudas (por conteo de muestras), por año.")
+  Métrica = unname(MET),
+  `n` = sapply(names(MET), function(m)
+        metrics_ci_df$n[metrics_ci_df$metric == m & metrics_ci_df$year == YEARS[1]]),
+  `2017 (IC95%)` = sapply(names(MET), ci_of, yr = YEARS[1]),
+  `2025 (IC95%)` = sapply(names(MET), ci_of, yr = YEARS[2]),
+  check.names = FALSE, row.names = NULL)
+kable(disp, caption = "Métricas crudas (por conteo de muestras) con intervalo de Wilson al 95%, por año. La columna n es el denominador de cada métrica en 2017 (varía entre métricas: OA usa todos los puntos usables, UA solo los mapeados como esa clase, PA solo los que la referencia asigna a esa clase).")
 ```
 
 <!-- AGENT_INTERP:retama -->
-El mapa clasifica bien en conjunto (OA ≈ 90–93%). Para la clase **retama**, los dos tipos de
-error son **moderados y de magnitud parecida**: la **comisión** (píxeles mapeados como retama
-que la foto-interpretación considera no-retama) ronda **12–17%**, y la **omisión** (retama según
-la referencia que el mapa no marcó) **10–13%**. En 2017 domina levemente la comisión (16.6% vs 10.0% de
-omisión): el modelo tiende a *sobre-marcar* algo de retama ese año. En 2025 los dos errores se
-emparejan (12.5% comisión, 13.1% omisión). No hay un sesgo fuerte y sistemático hacia sobre- o
-sub-estimar la retama, lo cual es deseable para comparar cobertura entre años.
+El mapa clasifica bien en conjunto (OA `r ci_of("OA", 2017)` en 2017 y `r ci_of("OA", 2025)` en
+2025; los intervalos se rozan, así que la mejora aparente entre años no es concluyente). Para la
+clase **retama**, los dos tipos de error son **moderados y de magnitud parecida**: la **comisión**
+(píxeles mapeados como retama que la foto-interpretación considera no-retama) es
+`r ci_of("CE_retama", 2017)` en 2017, y la **omisión** (retama según la referencia que el mapa no
+marcó), `r ci_of("OE_retama", 2017)`.
+
+Con los intervalos a la vista, la lectura es que **comisión y omisión son del mismo orden**: en
+2017, `r ci_of("CE_retama", 2017)` contra `r ci_of("OE_retama", 2017)` — intervalos que se
+solapan, así que la muestra no sostiene un sesgo hacia sobre- o sub-marcar. En 2025 la comisión
+baja (`r ci_of("CE_retama", 2025)`) y la omisión se mantiene (`r ci_of("OE_retama", 2025)`), pero
+tampoco ahí la diferencia es concluyente: los intervalos apenas se tocan.
+
+Dos advertencias sobre esta tabla, ambas resueltas más abajo. Primero, los errores de retama
+tienen intervalos **más anchos** que los de no-retama (±3–5 puntos contra ±2): la clase retama se
+apoya en ~200–260 puntos contra ~520–570 de la otra. Segundo y más importante, **estos números
+tratan cada punto por igual y por lo tanto no describen el territorio**: el muestreo sobre-
+representa deliberadamente a S1 y S2 respecto de su superficie real. La omisión de retama en
+particular cambia mucho al ponderar por área (§7); la comisión, casi nada.
 
 # Error de no-retama: cercano (S2) vs lejano (S3)
 
@@ -155,11 +208,12 @@ nf_disp <- data.frame(
   Año  = nf$year,
   Zona = ifelse(nf$zone == "near", "near (S2 + S1 año apagado)", "far (S3)"),
   `n (muestras no-retama)` = nf$n,
-  `Actual retama (FN)` = nf$FN,
-  `Actual no-retama (TN)` = nf$TN,
-  `Comisión no-retama` = pct(nf$CE_noret),
-  check.names = FALSE)
-kable(nf_disp, caption = "Comisión del no-retama desglosada por cercanía a la retama mapeada.")
+  `Referencia retama (FN)` = nf$FN,
+  `Referencia no-retama (TN)` = nf$TN,
+  `Comisión no-retama (IC95%)` = mapply(function(z, y)
+      ci_of(if (z == "near") "CE_noret_near" else "CE_noret_far", y), nf$zone, nf$year),
+  check.names = FALSE, row.names = NULL)
+kable(nf_disp, caption = "Comisión del no-retama desglosada por cercanía a la retama mapeada, con intervalo de Wilson al 95%.")
 ```
 
 <!-- AGENT_INTERP:nearfar -->
@@ -168,14 +222,27 @@ cercana**. En el fondo **lejano (S3)** la comisión del no-retama es **0% en amb
 (`r nf$TN[nf$zone=="far" & nf$year==2017]` de `r nf$n[nf$zone=="far" & nf$year==2017]` puntos
 en 2017 y `r nf$TN[nf$zone=="far" & nf$year==2025]` de `r nf$n[nf$zone=="far" & nf$year==2025]`
 en 2025 correctamente clasificados como no-retama): lejos de toda retama mapeada, el mapa
-prácticamente no produce falsos no-retama ni falsos positivos. Esto **valida empíricamente el
-supuesto** que motiva la variante *near-only* (`09vNear_`, retirada del pipeline publicado a
-`legacy/gee_scripts_09vNear/` por falta de App de validación operativa): gastar puntos en S3
-aporta poco.
-En cambio, en la zona **cercana** la comisión del no-retama es ~6–7% (2017: 6.8%, 2025: 6.2%):
-son píxeles de fondo, adyacentes a retama conocida, donde el mapa **omitió** retama que la
-foto-interpretación sí ve (bordes de parche, retama incipiente, fragmentos sub-píxel). Es el
-tipo de error esperable en el límite de la resolución de Sentinel-2 y en zonas semi-urbanizadas.
+prácticamente no produce falsos no-retama ni falsos positivos.
+
+**El intervalo es lo que hace interpretable ese cero.** Con
+`r nf$n[nf$zone=="far" & nf$year==2017]` puntos y ningún error, la estimación es
+`r ci_of("CE_noret_far", 2017)`: el dato **no** demuestra que la comisión lejana sea exactamente
+nula, sino que es **incompatible con una comisión mayor a ~3,6%**. Para el argumento que interesa
+alcanza y sobra —una comisión de a lo sumo 3,6% en el estrato que ocupa el
+`r pct(Wi[["S3"]])` del territorio— y **valida empíricamente el supuesto** que motiva la variante
+*near-only* (`09vNear_`, retirada del pipeline publicado a `legacy/gee_scripts_09vNear/` por
+falta de App de validación operativa): gastar puntos en S3 aporta poco. Si se quisiera acotar ese
+techo a ~1% habría que multiplicar por varios el n de S3, que es exactamente lo contrario de lo
+que sugiere el resultado.
+
+En cambio, en la zona **cercana** la comisión del no-retama es `r ci_of("CE_noret_near", 2017)`
+en 2017 y `r ci_of("CE_noret_near", 2025)` en 2025: son píxeles de fondo, adyacentes a retama
+conocida, donde el mapa **omitió** retama que la foto-interpretación sí ve (bordes de parche,
+retama incipiente, fragmentos sub-píxel). Es el tipo de error esperable en el límite de la
+resolución de Sentinel-2 y en zonas semi-urbanizadas. Los intervalos de *near* y *far*
+**no se solapan** en ninguno de los dos años, así que el contraste entre zonas —que es la
+hipótesis que sostiene el diseño estratificado— sí está estadísticamente respaldado, a diferencia
+de varias de las comparaciones entre años.
 
 # Concordancia inter-observador y confianza
 
@@ -194,15 +261,26 @@ kable(kd_disp, caption = "Acuerdo entre los dos evaluadores (solo puntos S1 con 
 ```
 
 <!-- AGENT_INTERP:kappa -->
-La concordancia entre observadores es **sustancial en 2017 (κ = `r num3(kappa_df$kappa[1])`,
-`r pct(kappa_df$pct_agreement[1])` de acuerdo)** y baja a **moderada en 2025
-(κ = `r num3(kappa_df$kappa[2])`, `r pct(kappa_df$pct_agreement[2])`)**. La caída es informativa:
-los desacuerdos (*split*) casi se duplican (17 → 26) y los "ambos no-retama" crecen frente a los
-"ambos retama". La causa aparece en las observaciones de los propios validadores —repetidamente
-anotan *"no hay imagen de alta resolución para 2025"*—: al degradarse la evidencia de alta
-resolución hacia el final de la serie, 2025 es intrínsecamente más difícil de foto-interpretar,
-y esa dificultad se traslada tanto al acuerdo inter-observador como (probablemente) al error del
-mapa.
+La concordancia entre observadores es **moderada en ambos años**: κ = `r num3(kappa_df$kappa[1])`
+(`r pct(kappa_df$pct_agreement[1])` de acuerdo) en 2017 y κ = `r num3(kappa_df$kappa[2])`
+(`r pct(kappa_df$pct_agreement[2])`) en 2025, sobre `r kappa_df$n_pairs[1]` pares con ambos
+observadores cargados.
+
+Conviene registrar que **el kappa bajó al ampliarse la muestra**: con los 127 pares disponibles en
+la bajada anterior daba 0,64 (2017) y 0,59 (2025); con `r kappa_df$n_pairs[1]` pares cae a
+~`r num3(kappa_df$kappa[1])` en los dos años. La lectura razonable es que los primeros pares
+cargados eran los más fáciles —los validadores avanzaron en orden de `pxid`, y el lote inicial
+resultó menos ambiguo— y que **~0,52–0,53 es la cifra más representativa** de la dificultad real
+de la tarea. Es una concordancia moderada, no mala para foto-interpretación de una especie que a
+10 m se confunde con otros arbustos fuera de la floración, pero implica que una fracción no
+trivial de los puntos es genuinamente ambigua: los desacuerdos descartados son
+`r qc_df$n_disagree[1]` (2017) y `r qc_df$n_disagree[2]` (2025).
+
+La diferencia entre años es menor de lo que sugería la bajada anterior, aunque 2025 sigue teniendo
+más desacuerdos (`r kappa_df$split[2]` contra `r kappa_df$split[1]`). Los propios validadores
+anotan repetidamente *"no hay imagen de alta resolución para 2025"*: al degradarse la evidencia
+hacia el final de la serie, 2025 es más difícil de foto-interpretar, y esa dificultad se traslada
+tanto al acuerdo inter-observador como, probablemente, al error del mapa.
 
 ## Terminología {-}
 
@@ -320,6 +398,99 @@ la grilla, en confianzas intermedias.
 > `analysis/09v_pairConfidence_scatter.png` para consulta puntual del recorrido de un mismo píxel
 > entre años; las dos figuras de grilla lo reemplazan en este reporte.
 
+# Precisión alcanzada vs. la precisión de diseño
+
+El muestreo se dimensionó con la regla de Olofsson
+
+$$n_i \;=\; \frac{U_i\,(1-U_i)}{SE_i^{2}}$$
+
+usando una exactitud esperada $U_i$ = `r paste(DESIGN$exp_UA, collapse=" / ")` y un objetivo
+$SE_i$ = `r paste(DESIGN$target_SE, collapse=" / ")` para S1 / S2 / S3, lo que dio
+`r paste(DESIGN$n_formula, collapse=" / ")` puntos — exactamente los
+`r paste(DESIGN$n_drawn, collapse=" / ")` que se sortearon. Esta sección compara esa **promesa de
+diseño** con la **precisión que efectivamente entregan los datos**, que puede quedar corta por dos
+razones muy distintas:
+
+1. **La carga está incompleta** — se evaluaron menos puntos de los sorteados, así que
+   $n_h$ < $n_{sorteado}$. La columna *SE con n completo* muestra a qué precisión se llega cuando
+   entren todas las etiquetas ya asignadas.
+2. **La exactitud real difiere de la supuesta** — si el $p_h$ observado está más lejos de 0 o 1 que
+   el $U_i$ asumido, $p(1-p)$ es mayor y el objetivo exige más puntos de los que el diseño compró,
+   por completa que esté la carga. La columna *n necesario* recalcula la regla con el $p_h$ real.
+
+$p_h$ es la proporción de puntos del estrato bien clasificados (mapa = referencia): la misma
+cantidad que entra en la varianza de la OA, y el análogo realizado del $U_i$ que asumió el diseño.
+
+```{r design-table}
+dd <- design_df
+dd_disp <- data.frame(
+  Año = dd$year, Estrato = dd$label,
+  `n cargado / sorteado` = sprintf("%d / %d (%s)", dd$n_loaded, dd$n_drawn,
+                                   pct(dd$pct_loaded)),
+  `p correcto (asumido)` = sprintf("%s (%s)", num3(dd$obs_p_correct), num3(dd$exp_UA)),
+  `SE objetivo` = num3(dd$target_SE),
+  `SE alcanzado` = sprintf("%s (%s×)", num4(dd$se_achieved), num3(dd$se_ratio_vs_target)),
+  `SE con n completo` = num4(dd$se_at_n_drawn),
+  `n necesario al p real` = dd$n_required_at_obs_p,
+  check.names = FALSE, row.names = NULL)
+kable(dd_disp, caption = "Precisión alcanzada por estrato frente al objetivo del diseño. \"SE alcanzado\" usa los puntos ya cargados; \"SE con n completo\", los sorteados; \"n necesario\" es la regla de Olofsson recalculada con la exactitud observada en vez de la supuesta.")
+```
+
+```{r design-oa, results='asis'}
+if (!is.null(design_oa_df)) {
+  oo <- design_oa_df
+  cat(knitr::kable(data.frame(
+    Año = oo$year,
+    `SE(OA) de diseño` = num4(oo$se_OA_design),
+    `SE(OA) alcanzado` = sprintf("%s (%s×)", num4(oo$se_OA_achieved),
+                                 num3(oo$ratio_achieved_vs_design)),
+    `SE(OA) con carga completa` = num4(oo$se_OA_at_full_loading),
+    check.names = FALSE, row.names = NULL),
+    caption = "Precisión de la exactitud global: lo que prometía el diseño contra lo que dan los datos."), sep = "\n")
+} else {
+  cat("> El equivalente de esta tabla para la **OA global** requiere los pesos de área **Wᵢ**",
+      "(la SE de la OA es una combinación ponderada por área de las tres SE de estrato), que",
+      "todavía no están cargados — ver §7. La tabla por estrato de arriba **no** los necesita.\n")
+}
+```
+
+<!-- AGENT_INTERP:design -->
+```{r design-numbers, include=FALSE}
+d17 <- design_df[design_df$year == 2017, ]
+s1 <- d17[d17$stratum == 1, ]; s2 <- d17[d17$stratum == 2, ]; s3 <- d17[d17$stratum == 3, ]
+```
+
+**Los tres estratos cumplen el objetivo, y S2/S3 lo cumplen con mucho margen.**
+
+En **S1** (mapa-retama) la suposición del diseño fue casi exacta: asumió $U$ = `r num3(s1$exp_UA)`
+y se observa $p$ = `r num3(s1$obs_p_correct)` en 2017
+(`r num3(design_df$obs_p_correct[design_df$year==2025 & design_df$stratum==1])` en 2025). Con
+`r s1$n_loaded` de `r s1$n_drawn` puntos cargados el SE ya es `r num4(s1$se_achieved)`, **por
+debajo** del objetivo de `r num3(s1$target_SE)`, y bajará a `r num4(s1$se_at_n_drawn)` al
+completar la carga de Lican. El estrato que más importa está bien dimensionado.
+
+En **S2 y S3** el diseño resultó **muy conservador**. Se asumió $U$ = `r num3(s2$exp_UA)` para el
+fondo cercano y la exactitud real es `r num3(s2$obs_p_correct)`; en el fondo lejano se asumió
+`r num3(s3$exp_UA)` contra un `r num3(s3$obs_p_correct)` observado. Como $p(1-p)$ se desploma
+cerca de 1, el SE alcanzado en S2 es `r num4(s2$se_achieved)` — `r num3(s2$se_ratio_vs_target)`×
+el objetivo. Dicho de otro modo: para el $SE$ = `r num3(s2$target_SE)` pedido, S2 habría
+necesitado **`r s2$n_required_at_obs_p` puntos en vez de `r s2$n_drawn`**.
+
+A nivel de **OA global** el efecto es todavía más marcado: el diseño prometía
+SE = `r num4(design_oa_df$se_OA_design[1])` (el valor que imprime el generador como *"Achieved
+overall-accuracy SE given nFinal"*) y los datos dan `r num4(design_oa_df$se_OA_achieved[1])`,
+unas **`r round(1/design_oa_df$ratio_achieved_vs_design[1])` veces más preciso**. La razón es
+aritmética: la varianza de la OA está dominada por S3 (pesa `r pct(Wi[["S3"]])` del área) y el
+diseño le asumió $U$ = 0.95, cuando en la muestra no tiene ni un error.
+
+> **Cuidado con leer esto como "sobra presupuesto de puntos".** El design check está construido
+> sobre la varianza de la **OA**, que —como se ve en §7— es la métrica menos informativa de este
+> mapa. Cuando se mira la métrica que sí importa, la **omisión de retama**, la conclusión se
+> invierte: su intervalo es el más ancho del reporte (±12 puntos) y está gobernado por un puñado
+> de puntos de S2. Para el diseño de una campaña futura, el criterio a optimizar no es el SE de
+> la OA sino el de PA/OE de retama, y bajo ese criterio S2 está **sub**-muestreado en relación
+> con su peso de área, no sobre-muestreado. Ver el cierre de §7.
+
 # Estimador de Olofsson (ponderado por área)
 
 ```{r olofsson, results='asis'}
@@ -327,19 +498,30 @@ if (!is.null(olofsson_df)) {
   o <- olofsson_df
   od <- data.frame(
     Año = o$year,
-    `OA (IC95%)` = sprintf("%s [%s, %s]", pct(o$OA), pct(o$OA_lo), pct(o$OA_hi)),
-    `CE retama` = pct(o$CE_retama), `OE retama` = pct(o$OE_retama),
-    `UA retama (IC95%)` = sprintf("%s [%s, %s]", pct(o$UA_retama), pct(o$UA_retama_lo), pct(o$UA_retama_hi)),
-    `PA retama (IC95%)` = sprintf("%s [%s, %s]", pct(o$PA_retama), pct(o$PA_retama_lo), pct(o$PA_retama_hi)),
-    check.names = FALSE)
-  cat(knitr::kable(od, caption = "Estimador estratificado de Olofsson (ponderado por área)."), sep = "\n")
+    `OA (IC95%)`        = pctci(o$OA, o$OA_lo, o$OA_hi),
+    `UA retama (IC95%)` = pctci(o$UA_retama, o$UA_retama_lo, o$UA_retama_hi),
+    `PA retama (IC95%)` = pctci(o$PA_retama, o$PA_retama_lo, o$PA_retama_hi),
+    `CE retama (IC95%)` = pctci(o$CE_retama, o$CE_retama_lo, o$CE_retama_hi),
+    `OE retama (IC95%)` = pctci(o$OE_retama, o$OE_retama_lo, o$OE_retama_hi),
+    check.names = FALSE, row.names = NULL)
+  cat(knitr::kable(od, caption = "Estimador estratificado de Olofsson (ponderado por área), clase retama. IC95% de la varianza estratificada (delta method para los cocientes, Olofsson et al. 2014 eqs. 5-14)."), sep = "\n")
+  cat("\n\n")
+  on <- data.frame(
+    Año = o$year,
+    `UA no-retama (IC95%)` = pctci(o$UA_noret, o$UA_noret_lo, o$UA_noret_hi),
+    `PA no-retama (IC95%)` = pctci(o$PA_noret, o$PA_noret_lo, o$PA_noret_hi),
+    `CE no-retama (IC95%)` = pctci(o$CE_noret, o$CE_noret_lo, o$CE_noret_hi),
+    `OE no-retama (IC95%)` = pctci(o$OE_noret, o$OE_noret_lo, o$OE_noret_hi),
+    check.names = FALSE, row.names = NULL)
+  cat(knitr::kable(on, caption = "Estimador de Olofsson, clase no-retama."), sep = "\n")
   cat("\n\n")
   if (!is.null(olofsson_area_df)) {
-    ad <- data.frame(Año = olofsson_area_df$year,
-      `Proporción de área con retama (IC95%)` = sprintf("%s [%s, %s]",
-        pct(olofsson_area_df$area_prop_retama), pct(olofsson_area_df$area_lo), pct(olofsson_area_df$area_hi)),
-      check.names = FALSE)
-    cat(knitr::kable(ad, caption = "Área estimada de retama."), sep = "\n")
+    a <- olofsson_area_df
+    ad <- data.frame(Año = a$year,
+      `Proporción de área con retama (IC95%)` = pctci(a$area_prop_retama, a$area_lo, a$area_hi),
+      `SE` = num4(a$area_se),
+      check.names = FALSE, row.names = NULL)
+    cat(knitr::kable(ad, caption = "Área estimada de retama (estimador estratificado, no el conteo de píxeles del mapa)."), sep = "\n")
   }
 } else {
   cat("> **Pendiente.** Los pesos de área **Wᵢ** no están cargados en `09v_valAnalysis_compute.R`",
@@ -351,20 +533,79 @@ if (!is.null(olofsson_df)) {
 ```
 
 <!-- AGENT_INTERP:olofsson -->
-Como referencia para cuando se carguen los Wᵢ: la ponderación por área **subirá** la OA respecto
-de la cruda. El estrato lejano S3 ocupa la mayor parte del territorio pero está poco muestreado
-(`r sum(mk$stratum==3)` puntos) y tiene error ~0; al pesarlo por su área real, su exactitud casi
-perfecta domina el promedio. La UA/PA de retama, en cambio, dependen sobre todo de S1 y cambiarán
-poco. Los intervalos de confianza serán más informativos que el punto crudo para el paper.
+```{r olof-numbers, include=FALSE}
+ps17 <- perstratum[["2017"]]; ps25 <- perstratum[["2025"]]
+fn_s2_17 <- ps17$FN[ps17$stratum == 2]; fn_s2_25 <- ps25$FN[ps25$stratum == 2]
+n_s2_17  <- ps17$n[ps17$stratum == 2]
+```
+
+Los pesos de área son `r pct(Wi[["S1"]])` (S1), `r pct(Wi[["S2"]])` (S2) y `r pct(Wi[["S3"]])`
+(S3). Esa asimetría —el mapa marca retama en apenas medio punto porcentual del ROI— es lo que
+hace que la ponderación **cambie las conclusiones**, no solo los decimales.
+
+**La OA sube a `r pctci(o17$OA, o17$OA_lo, o17$OA_hi)` y deja de ser informativa.** Con el 93,5%
+del territorio en fondo lejano sin un solo error, cualquier mapa que no invente retama en el
+medio de la nada obtiene una OA ≈ 99,8%. No es un logro del clasificador: es la aritmética de una
+clase rara. **Este número no debería encabezar los resultados del paper**; es el ejemplo de
+manual de por qué Olofsson et al. insisten en reportar UA y PA por clase.
+
+**La comisión de retama casi no se mueve** — `r pctci(o17$CE_retama, o17$CE_retama_lo, o17$CE_retama_hi)`
+ponderada contra `r ci_of("CE_retama", 2017)` cruda. Tiene sentido: la comisión se calcula entre
+los píxeles *mapeados como retama*, que viven todos en S1, así que ponderar por área no
+redistribuye nada.
+
+**La omisión de retama, en cambio, se duplica largamente:**
+`r pctci(o17$OE_retama, o17$OE_retama_lo, o17$OE_retama_hi)` en 2017 y
+`r pctci(o25$OE_retama, o25$OE_retama_lo, o25$OE_retama_hi)` en 2025, contra
+`r ci_of("OE_retama", 2017)` y `r ci_of("OE_retama", 2025)` en crudo. El mecanismo es directo: la
+omisión se calcula sobre el total de retama *según la referencia*, y ese total incluye la retama
+que aparece en el fondo cercano. En 2017 hay `r fn_s2_17` puntos de S2 (de `r n_s2_17`) donde los
+validadores ven retama y el mapa no; como S2 pesa `r num3(Wi[["S2"]]/Wi[["S1"]])` veces más que
+S1 por unidad de muestra, esos `r fn_s2_17` puntos representan casi tanta superficie de retama
+omitida como los `r ps17$FN[ps17$stratum==1]` falsos negativos de S1. **El mapa detecta bien la
+retama donde ya hay manchas consolidadas, y se pierde sistemáticamente la retama dispersa o
+incipiente del entorno** — que es justamente la que importa para detectar avance de la invasión.
+
+**El área estimada de retama es `r pctci(a17$area_prop_retama, a17$area_lo, a17$area_hi)` del ROI
+en 2017 y `r pctci(a25$area_prop_retama, a25$area_lo, a25$area_hi)` en 2025.** Los intervalos se
+superponen casi por completo: con estos datos **no se puede afirmar que el área de retama haya
+cambiado entre 2017 y 2025**. Es un resultado a tomar con cuidado —la validación se diseñó para
+medir exactitud, no para detectar cambio, y un diseño de cambio requeriría muestrear las
+transiciones— pero conviene tenerlo presente antes de leer la serie temporal como expansión.
+
+> **Fragilidad a declarar.** La omisión ponderada descansa sobre `r fn_s2_17` (2017) y
+> `r fn_s2_25` (2025) puntos de S2. Es el número con el intervalo más ancho del reporte y el más
+> sensible a los datos que faltan. Si el objetivo del paper es cuantificar la omisión de retama a
+> escala de paisaje, **la inversión con mejor retorno es ampliar S2**, no S1 ni S3 — lo contrario
+> de lo que sugiere el design check de §6, que optimiza la OA.
 
 # Limitaciones
 
-- **Métricas crudas, no ponderadas por área** (Olofsson pendiente de los Wᵢ). Los números de
-  arriba tratan cada muestra por igual y no reflejan todavía la exactitud a escala de todo el ROI.
-- **Validación incompleta:** Lican `r sum(sheets$validator=="lican")` y Jaime
-  `r sum(sheets$validator=="jaime")` filas cargadas (de ~390 cada uno); Sofi
-  `r sum(sheets$validator=="sofi")` (su lote original). Los ~100 puntos transferidos a Sofi el
-  2026-07-27 aún no se bajaron (quedaron fuera por el truncado de la planilla más grande). Los
+- **Las métricas crudas (§3–4) describen la muestra, no el territorio.** Tratan cada punto por
+  igual, y el muestreo sobre-representa deliberadamente a S1 y S2 respecto de su superficie. Para
+  inferencia a escala del ROI valen las de §7. Los intervalos de Wilson son, además, de muestreo
+  simple: no incorporan la estratificación.
+- **La OA ponderada (99,8%) no mide la calidad del mapa de retama.** Está dominada por el
+  `r pct(Wi[["S3"]])` del área que es fondo lejano trivial. Citarla como resultado principal sería
+  engañoso; las métricas de la clase retama son UA/PA.
+- **Los estratos con cero errores observados aportan varianza exactamente cero**, así que los
+  intervalos ponderados de OA y de las métricas de no-retama son **optimistas**. S3 tiene 0/102
+  errores en ambos años: su contribución a la varianza es 0 por construcción del estimador, no
+  porque se sepa que el error es nulo. El intervalo de Wilson de §4
+  (`r ci_of("CE_noret_far", 2017)`) es la lectura honesta de ese cero.
+- **La omisión ponderada de retama descansa en muy pocos puntos** (`r fn_s2_17` en 2017,
+  `r fn_s2_25` en 2025, todos en S2), amplificados por el peso de área de ese estrato. Es el
+  número más importante y a la vez el más frágil del reporte.
+- **El área no está pensada para leer cambio.** Los intervalos de 2017 y 2025 se superponen; un
+  diseño para detectar cambio requeriría muestrear las transiciones, no dos fechas por separado.
+- **La comparación de precisión de la §6 supone que los puntos que faltan cargar se parecen a los
+  ya cargados.** Las columnas "SE con n completo" y "n necesario" extrapolan el $p_h$ observado a
+  los puntos aún sin etiquetar; si los pendientes fueran sistemáticamente más difíciles (algo
+  posible, dado que Lican y Jaime avanzaron en orden de `pxid`), el SE final sería algo peor que
+  el proyectado.
+- **Validación incompleta en S1:** Sofi `r sum(sheets$validator=="sofi")`/540 y Jaime
+  `r sum(sheets$validator=="jaime")`/389 completaron su lote; Lican va
+  `r sum(sheets$validator=="lican")`/390. Como lo que falta es casi todo S1 par-validado, los
   pares con ambos observadores cargados son `r kappa_df$n_pairs[1]` por año, no los
   `r length(pair_pxids)` totales.
 - **Desacuerdos descartados:** `r qc_df$n_disagree[1]` (2017) y `r qc_df$n_disagree[2]` (2025)
