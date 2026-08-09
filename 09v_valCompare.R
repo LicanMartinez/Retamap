@@ -47,8 +47,14 @@ if (!exists("LABELS_CSV", inherits = FALSE)) {
 }
 
 # One entry per map version. `cols` are the columns of LABELS_CSV holding that
-# version's map label for each year. Adding the future 9-year yearly run with
-# gap-fill = one more entry here plus one more entry in 09v_valMapLabels.js.
+# version's map label for each year. Evaluating a NEW map version = one entry
+# here plus a matching one in MAPS of 09v_valMapLabels.js; the Rmd re-renders
+# with no text changes.
+#
+# The two noGapFill arms below are the `yearlyRF2` side exploration
+# (gee_scripts/explorations/yearlyRF2/, run and NOT adopted on 2026-08-09). Kept
+# as a reference configuration: canon vs globalNoGF isolates the gap-fill
+# contribution on its own, independently of the per-year question.
 CMP_VARIANTS <- list(
   list(tag = "canon",
        label = "Global RF2 + gap-fill (mapa publicado)",

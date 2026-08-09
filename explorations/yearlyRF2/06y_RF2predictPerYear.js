@@ -1,4 +1,8 @@
 // =============================================================================
+// SIDE EXPLORATION — NOT PART OF THE CANONICAL PIPELINE.
+// Explored, measured against the 09v validation, and NOT ADOPTED (2026-08-09).
+// Full write-up and numbers in ./README.md. Canonical: 06_RF2predict.js in ../../.
+// =============================================================================
 // 06y: RF2 VARIANT (yearlyRF2) — load per-year classifier → raw predictions
 // -----------------------------------------------------------------------------
 // Prerequisite : assets 05y_RF2_classifier_YYYY{RUN_SUFFIX}  (from 05y)

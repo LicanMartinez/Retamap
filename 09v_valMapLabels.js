@@ -38,8 +38,14 @@ var VAL_YEARS    = [2017, 2025];
 var CANON_SUFFIX = '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k';
 
 // One entry per map version to evaluate. `tag` becomes the column suffix, so
-// the R config (09v_valCompare.R) reads columns m<year>_<tag>.
-// Adding the future 9-year yearly run with gap-fill = one more entry here.
+// the R config (09v_valCompare.R) reads columns m<year>_<tag>. Evaluating a NEW
+// map version = add an entry here and a matching one in CMP_VARIANTS.
+//
+// The two 08y_ entries below come from the `yearlyRF2` side exploration
+// (explorations/yearlyRF2/, run and NOT adopted on 2026-08-09). They are kept
+// because their assets still exist and the pair is a useful reference point:
+// `canon` vs `globalNoGF` isolates what gap-fill contributes, independently of
+// the per-year question. Drop or replace them freely.
 var MAPS = [
   { tag: 'canon',
     stem: '08_RF2_prediction_',  suffix: CANON_SUFFIX },

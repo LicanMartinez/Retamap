@@ -96,13 +96,24 @@ the blind asset `09v_valPoints_fc`. Results are in preparation.
 ```
 .
 ├── 01_sentinelMosaic.js … 08_RF2patchFilter.js   # canonical classification pipeline
-├── 09v_val*.{js,R}                               # independent validation (generator, App, randomizer, analysis)
+├── 09v_val*.{js,R,Rmd}                           # independent validation (generator, App, randomizer, analysis)
+│                                                 #   incl. 09v_valMapLabels.js + 09v_valCompare.R/.Rmd:
+│                                                 #   map-agnostic tooling to score any map version on the
+│                                                 #   frozen validation points (paired, McNemar)
 ├── 11_predsVisualizer.js, 11.2_…finalSeries.js   # visualization
 ├── 12_gridExport.js                              # analysis grid
 ├── r_analysis/                                   # downstream R analysis (occupation, drivers, management)
-├── experimental/                                 # non-canonical exploratory variants
+├── explorations/                                 # side explorations: run, validated, NOT adopted (see its README)
+├── experimental/                                 # scratch forks, never evaluated (untracked)
 └── README.md
 ```
+
+`explorations/` and `experimental/` are **not** part of the published pipeline.
+The difference: `explorations/` holds branches that were carried through to a
+measured validation result and documented with their verdict (currently
+`yearlyRF2/` — one Random Forest per year instead of the pooled one, rejected);
+`experimental/` holds scratch forks that were never evaluated and is excluded
+from version control.
 
 ## How to run
 

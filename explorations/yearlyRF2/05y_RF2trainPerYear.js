@@ -1,4 +1,10 @@
 // =============================================================================
+// SIDE EXPLORATION — NOT PART OF THE CANONICAL PIPELINE.
+// Explored, measured against the 09v validation, and NOT ADOPTED (2026-08-09):
+// per-year training worsens retama omission in both validated years and breaks
+// the map's zero-commission property in the far background. Full write-up and
+// numbers in ./README.md. The canonical pipeline is 05_RF2train.js in ../../.
+// =============================================================================
 // 05y: RF2 VARIANT (yearlyRF2) — one classifier PER YEAR → classifier assets
 // -----------------------------------------------------------------------------
 // Prerequisite : assets 04_RF2_samples_YYYY{SAMPLES_SUFFIX}_train

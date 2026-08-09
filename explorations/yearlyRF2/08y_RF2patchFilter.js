@@ -1,4 +1,11 @@
 // =============================================================================
+// SIDE EXPLORATION — NOT PART OF THE CANONICAL PIPELINE.
+// Explored, measured against the 09v validation, and NOT ADOPTED (2026-08-09).
+// Full write-up and numbers in ./README.md. Canonical: 08_RF2patchFilter.js in
+// ../../. NOTE the globalRF2_noGapFill arm below is still of independent
+// interest: comparing it against the published map isolates what gap-fill
+// contributes, and the 09v comparison found that to be very little.
+// =============================================================================
 // 08y: RF2 VARIANT (yearlyRF2) — patch filter on the variant AND on a MATCHED
 //      no-gap-fill baseline of the canonical global RF2
 // -----------------------------------------------------------------------------
