@@ -15,10 +15,10 @@
 // Three strata that PARTITION the territory (enables an unbiased Olofsson area
 // estimator at the scale of the whole study area):
 //   S1 — mapped retama : pixel = 1 in 2017 AND/OR 2025
-//   S2 — near non-retama: not-S1, INSIDE 1 km cells (via reduceResolution of
-//                         isRetama to 1 km) that contain retama in EITHER
-//                         validated year (2017 and/or 2025) → FP-prone zones
-//   S3 — far non-retama : not-S1, OUTSIDE those cells (bulk of the area)
+//   S2 — near non-retama: not-S1, within 500 m of an S1 pixel (focal_max with a
+//                         square ~1 km window, section 3 — raster only, no grid
+//                         FC and no reduceResolution) → FP-prone zones
+//   S3 — far non-retama : not-S1, outside that dilation (bulk of the area)
 //
 // Output: Drive CSV '09v_valPoints_raw{RUN_SUFFIX}.csv' with one row per sampled
 // pixel CENTROID, carrying stratum + both map labels (m2017, m2025) + lon/lat.
@@ -42,7 +42,17 @@ var VAL_YEARS = [2017, 2025];   // years validated; also the years that define S
 // reduceResolution (raster-only), not by rasterizing the grid FC.
 
 var SEED       = 42;
-var AREA_SCALE = 100;   // m, coarse scale for stratum-area (Wi) estimation only
+
+// Scale at which the stratum areas (and therefore Wi) are measured.
+//
+// MUST stay at the native 10 m. It used to be 100 m ("coarse scale, weights
+// only") and that silently inflated S1 by a large factor: 08_RF2_prediction is a
+// PRESENCE-ONLY asset (see section 2), so at a coarser scale EE reads it from its
+// image pyramid, where the average over *valid* pixels is 1 in every cell that
+// contains at least one 10 m retama pixel. pixelArea() then charges the full
+// coarse cell — one 10 m pixel painting a whole hectare at 100 m. Fixed
+// 2026-08-10; measure with 13_areaAudit.js before ever changing this again.
+var AREA_SCALE = 10;
 
 // ── Minimum-distance grid (1 point per cell per stratum) ────────────────────
 // Quantize the map into GRID_CELL_SIZE cells; after sampling keep at most one
@@ -152,15 +162,22 @@ var stratStack = stratum
   .addBands(map2025.rename('m2025'));
 
 // =============================================================================
-// 5. STRATUM AREAS → WEIGHTS Wi  (coarse scale; weights only)
+// 5. STRATUM AREAS → WEIGHTS Wi
 // =============================================================================
+// Measured on the SAME grid the points are drawn from in section 8
+// (UTM19S at 10 m). Olofsson's estimator requires the weights to describe the
+// very strata the sample was drawn from; measuring the areas on one grid
+// (EPSG:4326 @100 m) while sampling on another (UTM19S @10 m) breaks that
+// correspondence on top of the pyramid inflation described at AREA_SCALE.
+var AREA_PROJ = UTM19S.atScale(AREA_SCALE);
+
 var areaOfStratum = function(s) {
   return ee.Number(ee.Image.pixelArea()
     .updateMask(stratum.eq(s))
     .reduceRegion({
       reducer  : ee.Reducer.sum(),
       geometry : roiGeom,
-      scale    : AREA_SCALE,
+      crs      : AREA_PROJ,
       maxPixels: 1e13,
       tileScale: 4
     }).get('area'));

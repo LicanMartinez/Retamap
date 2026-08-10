@@ -38,7 +38,20 @@ var gapFillCollection = ee.ImageCollection.fromImages(
 // 2. PATCH FILTER FUNCTION
 // -----------------------------------------------------------------------------
 // Class-1 patches with fewer than MIN_PATCH_PIX connected pixels → masked to
-// nodata. Class-0 pixels are preserved unchanged.
+// nodata.
+//
+// ⚠ The output is a PRESENCE-ONLY asset: class-0 pixels end up masked too,
+// despite what the .where(pred.eq(0), 0) below suggests. `connected` is derived
+// from pred.selfMask(), so it is masked wherever pred == 0; EE's .or() does not
+// short-circuit, it INTERSECTS masks, so the updateMask() at the end keeps only
+// "class 1 in a patch of ≥ MIN_PATCH_PIX". Everything else is nodata, NOT 0.
+//
+// This is load-bearing downstream and must not be "fixed" casually:
+//   09v_valGenerator.js  §2  unmask(0)s the maps and takes the valid-territory
+//                            mask from 01_MergedBands instead of from here.
+//   09v_valMapLabels.js      leaves the labels masked on purpose (blank → 0 in R).
+// It also means any area statistic has to reintroduce the observation footprint
+// from 01_MergedBands — see 13_areaAudit.js.
 // =============================================================================
 var applyPatchFilter = function(image) {
   var pred = image.select('classification');
@@ -47,12 +60,13 @@ var applyPatchFilter = function(image) {
     .selfMask()                              // isolate class-1 pixels
     .connectedPixelCount(MAX_NEIGHBORS, true);
 
-  // Keep class-1 only where patch is large enough; class-0 always passes through
+  // Keep class-1 only where the patch is large enough.
   var class1_filtered = pred
     .updateMask(connected.gte(MIN_PATCH_PIX))
-    .where(pred.eq(0), 0);                   // restore class-0 under the mask
+    .where(pred.eq(0), 0);
 
-  // Merge: class-0 from original, filtered class-1
+  // NOTE: the mask below intersects with `connected`'s mask (see header), so the
+  // result is presence-only — class-0 does NOT survive this step.
   return pred
     .where(pred.eq(1), class1_filtered)
     .updateMask(

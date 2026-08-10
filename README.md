@@ -38,10 +38,19 @@ numeric prefix of each asset matches the script that creates it.
 | 11 | `11_predsVisualizer.js` | Visualization of RF1/raw/gap-fill/final predictions per year | — |
 | 11.2 | `11.2_predsVisualizer_finalSeries.js` | Final-map time series (color gradient per year) | — |
 | 12 | `12_gridExport.js` | Regular analysis grid over the ROI | `12_grid_<SIZE>m[_clipped]` |
+| 13 | `13_areaAudit.js` | Area diagnostics: measures the mapped area under every defensible convention and scale, and recomputes the validation's stratum weights at native resolution | — (prints / optional Drive CSV) |
 
 Run order: **01 → 02 → 03 → 04 → 05 → 06 → 07 → 08**. Independent validation
-(the `09v` family) runs after stage 08. Scripts 11/11.2 (visualization) and 12
-(grid) are auxiliary.
+(the `09v` family) runs after stage 08. Scripts 11/11.2 (visualization), 12
+(grid) and 13 (area audit) are auxiliary.
+
+> **Note on stage-08 outputs.** `08_RF2_prediction_YYYY<SUFFIX>` is a
+> **presence-only** raster: retama pixels hold 1 and everything else — including
+> background — is *nodata*, not 0. Any area statistic must therefore reintroduce
+> the valid-observation footprint from `01_MergedBands_YYYY`, and must be measured
+> at the native 10 m resolution: coarsening a presence-only mask makes Earth
+> Engine read it from an image pyramid where a single 10 m pixel fills the whole
+> coarse cell. `13_areaAudit.js` exists to keep that honest.
 
 ## Canonical configuration
 

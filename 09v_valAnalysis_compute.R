@@ -16,15 +16,19 @@
 #   - 09v_metrics_digest.md          human-readable dump of ALL numbers
 #
 # This script is standalone (base R + ggplot2, no pandoc) AND is sourced by
-# 09v_valAnalysis.Rmd. Running it alone == "pass 1" (export tables/figures/digest);
-# the Rmd then embeds the same objects and adds narrative == the final report.
+# 09v_valAnalysis_summarized.Rmd (the canonical report; the older long-form
+# 09v_valAnalysis.Rmd was dropped on 2026-08-09). Running it alone exports the
+# tables/figures/digest; the Rmd embeds the same objects and adds the narrative.
 #
 # Reference reconciliation per (pxid, year), driven by master-key `validators`
 # (source of truth after the 2026-07-27 rebalancing):
 #   - single validator  -> that label
-#   - pair (2 validators) -> consensus if they agree; DISCARDED that year if they
-#                            disagree (reported as %)
+#   - pair (2 validators) -> consensus if they agree; if they disagree, resolved
+#                            in favour of the clearly more confident observer
+#                            (confidence odds ratio >= OR_THRESHOLD) and only
+#                            DISCARDED when the two are comparably confident
 #   - confidence == 0 (no determinable) -> that label dropped for that year
+#   - every observer below MIN_CONF -> the point is dropped for that year
 # Map label per (pxid, year) = m2017 / m2025 (blank = 0 no-retama, 1 = retama),
 # from the master key by default or from MAP_LABELS when evaluating a variant.
 # Strata: 1 = S1 mapped-retama, 2 = S2 near background, 3 = S3 far background.
@@ -75,6 +79,34 @@ OUT_DIR <- if (nzchar(VARIANT_TAG)) {
 Wi <- c(S1 = 0.005562348528027356,
         S2 = 0.059646186135871575,
         S3 = 0.934791465336101)
+
+# Absolute stratum areas behind those weights (m^2, same GEE console print).
+# Only used to express the estimated retama area in hectares instead of "% of ROI".
+AREA_M2  <- c(S1 = 55178037, S2 = 591685230, S3 = 9273053977)
+TOTAL_HA <- sum(AREA_M2) / 1e4        # ~991,992 ha of valid land in the ROI
+
+# --- REFERENCE RECONCILIATION RULES (2026-08-09) -----------------------------
+# Two rules added on top of the original "consensus or discard":
+#
+# (a) LOW-CONFIDENCE EXCLUSION. A point whose every observer declared confidence
+#     < MIN_CONF is dropped for that year: a label the interpreter itself does
+#     not trust is not a usable reference. For a 2-observer point this means
+#     BOTH are below the threshold (if one is confident, the point survives and
+#     rule (b) can still resolve it).
+#
+# (b) ODDS-RATIO RECOVERY OF DISAGREEMENTS. Confidence 1-10 is read as a
+#     subjective probability p = conf/11 (never exactly 0 or 1, so the odds stay
+#     finite), giving odds = conf / (11 - conf). For a disagreeing pair the odds
+#     ratio OR = odds_A / odds_B measures how much more sure A is than B. If
+#     OR >= OR_THRESHOLD we keep A's label, if OR <= 1/OR_THRESHOLD we keep B's,
+#     and only the middle band (comparable confidence, genuine ambiguity) is
+#     discarded. With OR_THRESHOLD = 2 e.g. (10 vs 8) and (9 vs 7) are recovered,
+#     (9 vs 8) and (8 vs 7) are not.
+# Both are exposed as knobs so a sensitivity run only needs to set them before
+# sourcing (same mechanism as VARIANT_TAG / MAP_LABELS above).
+if (!exists("MIN_CONF",     inherits = FALSE)) MIN_CONF     <- 5
+if (!exists("OR_THRESHOLD", inherits = FALSE)) OR_THRESHOLD <- 2
+conf_odds <- function(conf) conf / (11 - conf)   # p = conf/11 -> p/(1-p)
 
 dir.create(OUT_DIR, showWarnings = FALSE, recursive = TRUE)
 
@@ -147,14 +179,36 @@ for (px in mk$pxid) {
     n_obs <- nrow(sub)
     if (n_obs == 0) next
     labs <- unique(sub$class01)
-    status <- if (length(labs) > 1) "disagree"
-              else if (n_obs >= 2)  "agree" else "single"
-    ref <- if (length(labs) == 1) labs else NA_integer_
+    or_val <- NA_real_; winner <- NA_character_; loser <- NA_character_
+    if (max(sub$conf) < MIN_CONF) {
+      # rule (a): nobody trusted their own call -> no usable reference this year
+      status <- "lowconf"; ref <- NA_integer_
+    } else if (length(labs) == 1) {
+      status <- if (n_obs >= 2) "agree" else "single"
+      ref    <- labs
+    } else if (n_obs == 2) {
+      # rule (b): resolve the disagreement by the confidence odds ratio
+      vs <- sort(sub$validator)
+      A  <- sub[sub$validator == vs[1], ][1, ]
+      B  <- sub[sub$validator == vs[2], ][1, ]
+      or_val <- conf_odds(A$conf) / conf_odds(B$conf)
+      if (or_val >= OR_THRESHOLD) {
+        status <- "recovered"; ref <- A$class01; winner <- A$validator; loser <- B$validator
+      } else if (or_val <= 1 / OR_THRESHOLD) {
+        status <- "recovered"; ref <- B$class01; winner <- B$validator; loser <- A$validator
+      } else {
+        status <- "disagree";  ref <- NA_integer_
+      }
+    } else {
+      status <- "disagree"; ref <- NA_integer_          # >2 observers: not expected
+    }
     ana_rows[[length(ana_rows) + 1]] <- data.frame(
       pxid = px, year = yr, stratum = mk_strat[[px]],
       map = mapcol[[as.character(yr)]][[px]],
       ref = ref, status = status, n_obs = n_obs,
       n_assigned = length(assigned),
+      or_ratio = or_val, winner = winner, loser = loser,
+      conf_max = max(sub$conf),
       # confidence of the lone observer (NA for 2-observer points): feeds the
       # single-validator marginal band of the confidence-lattice figures
       conf_single = if (n_obs == 1) sub$conf[1] else NA_integer_,
@@ -163,8 +217,40 @@ for (px in mk$pxid) {
 }
 ana <- do.call(rbind, ana_rows)
 
-# usable rows for the confusion matrix: a defined reference (agree|single)
-usable <- ana[ana$status %in% c("agree", "single") & !is.na(ana$ref), ]
+# usable rows for the confusion matrix: a defined reference. "recovered" = a
+# disagreeing pair resolved by the odds-ratio rule (b) above.
+usable <- ana[ana$status %in% c("agree", "single", "recovered") & !is.na(ana$ref), ]
+
+# ---- 3b. RECONCILIATION SUMMARIES (recovery + low-confidence exclusion) -----
+recovery_df <- do.call(rbind, lapply(YEARS, function(yr) {
+  a <- ana[ana$year == yr, ]
+  spl <- a[a$status %in% c("recovered", "disagree"), ]
+  data.frame(year = yr,
+    n_split      = nrow(spl),                      # pairs labelled differently
+    n_recovered  = sum(spl$status == "recovered"),
+    n_discarded  = sum(spl$status == "disagree"),
+    pct_recovered = if (nrow(spl)) sum(spl$status == "recovered") / nrow(spl) else NA_real_,
+    row.names = NULL)
+}))
+# 3x3 matrix of WHOSE label was kept (row) over WHOSE was dropped (column):
+# an asymmetric row/column profile means that validator declares systematically
+# higher/lower confidence than the others, not that they are more often right.
+rec <- ana[ana$status == "recovered", ]
+recovery_mat <- table(factor(rec$winner, levels = VALIDATORS),
+                      factor(rec$loser,  levels = VALIDATORS))
+names(dimnames(recovery_mat)) <- c("etiqueta_tomada", "etiqueta_descartada")
+recovery_mat_year <- lapply(setNames(YEARS, YEARS), function(yr) {
+  r <- rec[rec$year == yr, ]
+  table(factor(r$winner, levels = VALIDATORS), factor(r$loser, levels = VALIDATORS))
+})
+# points dropped because every observer was below MIN_CONF
+lowconf_df <- do.call(rbind, lapply(YEARS, function(yr) {
+  a <- ana[ana$year == yr & ana$status == "lowconf", ]
+  data.frame(year = yr, n_lowconf = nrow(a),
+    n_lowconf_pair   = sum(a$n_obs >= 2),
+    n_lowconf_single = sum(a$n_obs == 1),
+    row.names = NULL)
+}))
 
 # Zone for the no-retama near/far split. Derived from the STRATUM alone: S1 and
 # S2 are both inside the ~1 km near-retama envelope by construction, S3 is the
@@ -286,6 +372,8 @@ for (yr in YEARS) {
   qc_by_year[[as.character(yr)]] <- data.frame(year = yr,
     n_usable = nrow(uy),
     n_disagree = sum(ay$status == "disagree"),
+    n_recovered = sum(ay$status == "recovered"),
+    n_lowconf = sum(ay$status == "lowconf"),
     n_pairs_eval = sum(ay$n_assigned == 2),
     # single-validator points feeding `usable`, split by WHY they're single:
     # by design (only 1 validator was ever assigned, e.g. most of S2/S3) vs.
@@ -320,6 +408,7 @@ if (all(!is.na(Wi))) {
     nh <- setNames(integer(length(strata)), strata)
     ph_correct <- setNames(numeric(length(strata)), strata)   # y_h = fraction correct
     ph_refret  <- setNames(numeric(length(strata)), strata)   # fraction ref==retama
+    ph_mapret  <- setNames(numeric(length(strata)), strata)   # fraction map==retama
     # store per-stratum fractions for ratio variances
     fr <- list()
     for (st in strata) {
@@ -334,9 +423,19 @@ if (all(!is.na(Wi))) {
       p["0", "0"] <- p["0", "0"] + W * cc["TN"]
       ph_correct[st] <- (cc["TP"] + cc["TN"])
       ph_refret[st]  <- (cc["TP"] + cc["FN"])
+      ph_mapret[st]  <- (cc["TP"] + cc["FP"])
       fr[[st]] <- cc
     }
     OA <- p["1","1"] + p["0","0"]
+    # OA restricted to the near domain S1 u S2 (weights renormalized within it).
+    # The full-ROI OA is dominated by S3 (93.5% of the area, essentially error
+    # free), so this is the version that actually describes the part of the
+    # territory where the map has to make a decision.
+    Wnear   <- c("1" = Wv[["1"]], "2" = Wv[["2"]]) / (Wv[["1"]] + Wv[["2"]])
+    OA_near <- sum(sapply(c("1", "2"), function(st) Wnear[[st]] * ph_correct[st]))
+    vOA_near <- sum(sapply(c("1", "2"), function(st) if (nh[st] > 1)
+      Wnear[[st]]^2 * ph_correct[st] * (1 - ph_correct[st]) / (nh[st] - 1) else 0))
+    seOA_near <- sqrt(max(vOA_near, 0))
     UA_ret <- safe(p["1","1"], p["1","1"] + p["1","0"])
     PA_ret <- safe(p["1","1"], p["1","1"] + p["0","1"])
     UA_nor <- safe(p["0","0"], p["0","0"] + p["0","1"])
@@ -384,6 +483,8 @@ if (all(!is.na(Wi))) {
     ol[[as.character(yr)]] <- data.frame(
       year = yr,
       OA = OA, OA_se = seOA, OA_lo = OA - z*seOA, OA_hi = OA + z*seOA,
+      OA_near = OA_near, OA_near_se = seOA_near,
+      OA_near_lo = OA_near - z*seOA_near, OA_near_hi = OA_near + z*seOA_near,
       UA_retama = UA_ret, UA_retama_se = se_of(v_UAret), UA_retama_lo = cUAret[1], UA_retama_hi = cUAret[2],
       PA_retama = PA_ret, PA_retama_se = se_of(v_PAret), PA_retama_lo = cPAret[1], PA_retama_hi = cPAret[2],
       UA_noret  = UA_nor, UA_noret_se  = se_of(v_UAnor), UA_noret_lo  = cUAnor[1], UA_noret_hi  = cUAnor[2],
@@ -394,13 +495,55 @@ if (all(!is.na(Wi))) {
       CE_noret  = 1 - UA_nor, CE_noret_se  = se_of(v_UAnor), CE_noret_lo  = 1 - cUAnor[2], CE_noret_hi  = 1 - cUAnor[1],
       OE_noret  = 1 - PA_nor, OE_noret_se  = se_of(v_PAnor), OE_noret_lo  = 1 - cPAnor[2], OE_noret_hi  = 1 - cPAnor[1],
       row.names = NULL)
-    # area of retama (proportion) + CI (stratified proportion estimator)
-    Aret <- sum(sapply(strata, function(st) Wv[[st]] * ph_refret[st]))
-    vA <- sum(sapply(strata, function(st) if (nh[st] > 1)
-      Wv[[st]]^2 * ph_refret[st] * (1 - ph_refret[st]) / (nh[st] - 1) else 0))
+    # Area of retama, as a proportion of the valid ROI, with a CI from the
+    # stratified proportion estimator. Two versions, same design and same
+    # formula, differing ONLY in which label defines the numerator:
+    #
+    #   REFERENCE area — p_h = fraction of the stratum the humans called retama.
+    #     This is Olofsson's bias-adjusted estimate of how much retama is really
+    #     there: it adds back the omission the map missed and removes its
+    #     commission. It does NOT describe the map.
+    #
+    #   MAPPED area — p_h = fraction of the stratum the MAP called retama.
+    #     A design-based estimate of the extent of the map itself, so it is the
+    #     quantity that is directly comparable to counting the map's pixels
+    #     (13_areaAudit.js section 3) and to the area reported in the paper.
+    #
+    # Reporting both turns "the validation and the map disagree" into a
+    # comparison with an interval attached: if the pixel count falls outside the
+    # mapped-area CI, something in the area accounting is wrong, independently of
+    # how accurate the map is.
+    #
+    # CAVEAT, and it is the whole point: the map calls nothing retama outside S1
+    # (p_map is 0 in both S2 and S3 in every year loaded so far), so the mapped
+    # area reduces to W_S1 x (share of S1 the map calls retama that year) — it is
+    # a re-expression of the S1 stratum area, not an independent measurement of
+    # it. So it can only be trusted once W_S1 itself is trusted: measure it with
+    # 13_areaAudit.js, never at a coarsened scale.
+    prop_ci <- function(ph) {
+      A <- sum(sapply(strata, function(st) Wv[[st]] * ph[st]))
+      v <- sum(sapply(strata, function(st) if (nh[st] > 1)
+        Wv[[st]]^2 * ph[st] * (1 - ph[st]) / (nh[st] - 1) else 0))
+      s <- sqrt(max(v, 0))
+      c(est = unname(A), se = unname(s), lo = unname(A - z*s), hi = unname(A + z*s))
+    }
+    aRef <- prop_ci(ph_refret)
+    aMap <- prop_ci(ph_mapret)
     ar[[as.character(yr)]] <- data.frame(year = yr,
-      area_prop_retama = Aret, area_se = sqrt(max(vA, 0)),
-      area_lo = Aret - z*sqrt(vA), area_hi = Aret + z*sqrt(vA),
+      area_prop_retama = aRef[["est"]], area_se = aRef[["se"]],
+      area_lo = aRef[["lo"]], area_hi = aRef[["hi"]],
+      # same estimate expressed in hectares of the ROI's valid land
+      area_ha    = aRef[["est"]] * TOTAL_HA,
+      area_ha_se = aRef[["se"]]  * TOTAL_HA,
+      area_ha_lo = aRef[["lo"]]  * TOTAL_HA,
+      area_ha_hi = aRef[["hi"]]  * TOTAL_HA,
+      # the map's own extent, same design
+      area_map_prop  = aMap[["est"]], area_map_se = aMap[["se"]],
+      area_map_lo    = aMap[["lo"]],  area_map_hi = aMap[["hi"]],
+      area_map_ha    = aMap[["est"]] * TOTAL_HA,
+      area_map_ha_se = aMap[["se"]]  * TOTAL_HA,
+      area_map_ha_lo = aMap[["lo"]]  * TOTAL_HA,
+      area_map_ha_hi = aMap[["hi"]]  * TOTAL_HA,
       row.names = NULL)
   }
   olofsson_df      <- do.call(rbind, ol)
@@ -520,6 +663,17 @@ kappa_df <- do.call(rbind, kappa_rows)
 pair_df  <- if (length(pair_scatter)) do.call(rbind, pair_scatter) else
             data.frame(pxid=character(), year=integer(), vA=character(), vB=character(),
                        x=integer(), y=integer(), vote=character(), map=integer())
+
+# how each pair ended up being treated by the reconciliation rules (section 3)
+pair_df <- merge(pair_df, ana[, c("pxid", "year", "status", "or_ratio")],
+                 by = c("pxid", "year"), all.x = TRUE)
+pair_df$resolution <- factor(
+  ifelse(pair_df$status == "lowconf", "excluido (confianza < 5)",
+  ifelse(pair_df$vote != "split",     "acuerdo",
+  ifelse(pair_df$status == "recovered", "desacuerdo recuperado",
+                                        "desacuerdo descartado"))),
+  levels = c("acuerdo", "desacuerdo recuperado", "desacuerdo descartado",
+             "excluido (confianza < 5)"))
 
 # ---- 7. PAIRED-CONFIDENCE SCATTER (shared jitter for point + segment) -------
 set.seed(SEED)
@@ -732,6 +886,91 @@ for (yr in YEARS) {
 bubble_df   <- do.call(rbind, bubble_tabs)
 votegrid_df <- do.call(rbind, votegrid_tabs)
 
+# ---- 7c. ODDS-RATIO LATTICE (the disagreement-recovery criterion) -----------
+# ONE figure for both years pooled: a (pxid, year) is treated as an independent
+# observation here (it isn't strictly — the same pixel appears twice — but the
+# figure illustrates the RULE, it is not an inference).
+# Background = |log2(OR)| of the two confidences read as probabilities p = conf/11,
+# white (equally sure) -> grey (one clearly surer). Unsigned on purpose: which of
+# the two observers wins is not the point, how far apart they are is. The dashed
+# contour is the OR_THRESHOLD decision boundary — a disagreeing pair outside it is
+# resolved in favour of the more confident observer, inside it is discarded. The
+# dotted square is the low-confidence exclusion zone (every observer < MIN_CONF).
+# Bottom band ("1 val.") = single-validator points, placed by their one confidence.
+or_grid <- expand.grid(A = seq(0.5, 10.5, length.out = 140),
+                       B = seq(0.5, 10.5, length.out = 140))
+or_grid$absLog2OR <- abs(log2(conf_odds(or_grid$A) / conf_odds(or_grid$B)))
+RES_COLS <- c("acuerdo"                  = "#006400",   # dark green
+              "desacuerdo recuperado"    = "#F0A202",   # golden
+              "desacuerdo descartado"    = "#8B0000",   # dark red
+              "excluido (confianza < 5)" = "#8A2BE2",   # violet
+              "1 validador"              = "grey35")
+
+# pairs (both years pooled)
+or_pairs <- aggregate(list(n = rep(1, nrow(pair_df))),
+                      by = list(A = pair_df$x, B = pair_df$y,
+                                resolution = pair_df$resolution), FUN = sum)
+# single-validator points, on the marginal band
+sng <- ana[!is.na(ana$conf_single), ]
+sng$resolution <- factor(ifelse(sng$status == "lowconf",
+                                "excluido (confianza < 5)", "1 validador"),
+                         levels = names(RES_COLS))
+or_band <- aggregate(list(n = rep(1, nrow(sng))),
+                     by = list(A = sng$conf_single, resolution = sng$resolution),
+                     FUN = sum)
+or_band$B <- Y_BAND
+# The band holds ~4x more points than the busiest lattice node, so on a shared
+# size scale it would swamp the grid. Rescale it to its own maximum (declared in
+# the caption); the size legend refers to the paired points.
+or_pairs$n_plot <- or_pairs$n
+or_band$n_plot  <- or_band$n * (max(or_pairs$n) / max(or_band$n))
+or_bub <- rbind(or_pairs[, c("A", "B", "resolution", "n", "n_plot")],
+                or_band[, c("A", "B", "resolution", "n", "n_plot")])
+or_bub$resolution <- factor(as.character(or_bub$resolution), levels = names(RES_COLS))
+or_bub <- or_bub[order(-or_bub$n), ]   # big circles first, small ones stay on top
+
+or_plot <- ggplot() +
+  geom_raster(data = or_grid, aes(x = A, y = B, fill = absLog2OR), interpolate = TRUE) +
+  geom_contour(data = or_grid, aes(x = A, y = B, z = absLog2OR),
+               breaks = log2(OR_THRESHOLD), linetype = "dashed",
+               color = "grey20", linewidth = 0.5) +
+  annotate("rect", xmin = 0.5, xmax = MIN_CONF - 0.5,
+           ymin = 0.5, ymax = MIN_CONF - 0.5,
+           fill = NA, color = "grey15", linetype = "dotted", linewidth = 0.6) +
+  geom_hline(yintercept = 0.35, color = "grey60", linewidth = 0.3) +
+  geom_point(data = or_bub, aes(x = A, y = B, size = n_plot, color = resolution),
+             shape = 21, fill = "white", alpha = 0.9, stroke = 1.4) +
+  scale_fill_gradient(low = "#FFFFFF", high = "grey68",
+    name = paste0("Brecha de\nconfianza\n(odds ratio)"),
+    limits = c(0, 4), oob = scales::squish,
+    breaks = c(0, 1, 2, 3, 4), labels = c("1x", "2x", "4x", "8x", "16x")) +
+  scale_color_manual(values = RES_COLS, drop = FALSE, name = "Punto") +
+  scale_size_area(max_size = 12, name = "n de pares",
+                  breaks = c(5, 10, 20, 30, 40)) +
+  scale_x_continuous(breaks = CONF_LEVELS, expand = c(0, 0), limits = c(0.5, 10.5)) +
+  scale_y_continuous(breaks = c(Y_BAND, CONF_LEVELS),
+                     labels = c("1 val.", as.character(CONF_LEVELS)),
+                     expand = c(0, 0), limits = c(Y_BAND - 0.55, 10.5)) +
+  coord_fixed() +
+  labs(title = "Criterio de recuperacion de desacuerdos",
+       subtitle = paste0(sum(recovery_df$n_split), " pares en desacuerdo (",
+                         paste(YEARS, collapse = " + "), "): ",
+                         sum(recovery_df$n_recovered), " recuperados fuera de la linea ",
+                         OR_THRESHOLD, "x, ", sum(recovery_df$n_discarded),
+                         " descartados dentro"),
+       caption = paste0("Punteado: exclusion por confianza < ", MIN_CONF,
+                        ". Banda inferior: puntos con un solo validador (n = ",
+                        sum(or_band$n), ", escala de tamano propia)."),
+       x = "Confianza validador A (1-10)",
+       y = "Confianza validador B (1-10)") +
+  guides(color = guide_legend(order = 1, override.aes = list(size = 4)),
+         size  = guide_legend(order = 2), fill = guide_colorbar(order = 3)) +
+  theme_bw(base_size = 12) +
+  theme(panel.grid = element_blank(), plot.caption = element_text(hjust = 0))
+
+ggsave(file.path(OUT_DIR, "09v_orLattice.png"), or_plot,
+       width = 9.5, height = 7.2, dpi = 150)
+
 # ---- 8. EXPORT TABLES -------------------------------------------------------
 for (yr in YEARS) {
   cc <- conf_by_year[[as.character(yr)]]
@@ -751,6 +990,10 @@ if (!is.null(design_oa_df))
 write.csv(nearfar_df,    file.path(OUT_DIR, "09v_nearfar_noretama.csv"),   row.names = FALSE)
 write.csv(kappa_df,      file.path(OUT_DIR, "09v_kappa.csv"),              row.names = FALSE)
 write.csv(qc_df,         file.path(OUT_DIR, "09v_qc.csv"),                 row.names = FALSE)
+write.csv(recovery_df,   file.path(OUT_DIR, "09v_disagreeRecovery.csv"),   row.names = FALSE)
+write.csv(lowconf_df,    file.path(OUT_DIR, "09v_lowConfExcluded.csv"),    row.names = FALSE)
+write.csv(as.data.frame.matrix(recovery_mat),
+          file.path(OUT_DIR, "09v_disagreeRecovery_matrix.csv"))
 write.csv(bubble_df,     file.path(OUT_DIR, "09v_confLattice_bubble_counts.csv"),   row.names = FALSE)
 write.csv(votegrid_df,   file.path(OUT_DIR, "09v_confLattice_voteGrid_counts.csv"), row.names = FALSE)
 if (!is.null(olofsson_df)) {
@@ -777,11 +1020,15 @@ for (yr in YEARS) {
   cc <- conf_by_year[[as.character(yr)]]
   m  <- metrics_uw_df[metrics_uw_df$year == yr, ]
   q  <- qc_df[qc_df$year == yr, ]
+  rc <- recovery_df[recovery_df$year == yr, ]
+  lc <- lowconf_df[lowconf_df$year == yr, ]
   dg <- c(dg, sprintf("## Year %d", yr),
     sprintf("Confusion (map x ref): TP=%d FP=%d FN=%d TN=%d  (N usable=%d)",
             cc["TP"], cc["FP"], cc["FN"], cc["TN"], sum(cc)),
-    sprintf("QC: disagreements discarded=%d | conf0 labels excluded=%d",
-            q$n_disagree, q$n_conf0_excluded),
+    sprintf("QC: disagreements discarded=%d | recovered by OR>=%g=%d of %d splits (%s%%) | low-conf(<%d) points dropped=%d (pairs=%d, singles=%d) | conf0 labels excluded=%d",
+            q$n_disagree, OR_THRESHOLD, rc$n_recovered, rc$n_split,
+            fmt(100 * rc$pct_recovered, 1), MIN_CONF, lc$n_lowconf,
+            lc$n_lowconf_pair, lc$n_lowconf_single, q$n_conf0_excluded),
     "Crude (sample-based, Wilson 95% CI, unweighted):",
     "")
   ciy <- metrics_ci_df[metrics_ci_df$year == yr, ]
@@ -806,8 +1053,15 @@ for (yr in YEARS) {
       sprintf("  PA_noret   = %s [%s, %s]  (SE=%s)   OE_noret  = %s [%s, %s]",
               fmt(o$PA_noret), fmt(o$PA_noret_lo), fmt(o$PA_noret_hi), fmt(o$PA_noret_se, 4),
               fmt(o$OE_noret), fmt(o$OE_noret_lo), fmt(o$OE_noret_hi)),
-      sprintf("  Area(retama) proportion = %s [%s, %s]  (SE=%s)",
-              fmt(a$area_prop_retama), fmt(a$area_lo), fmt(a$area_hi), fmt(a$area_se, 4)),
+      sprintf("  OA (S1+S2 only, weights renormalized) = %s [%s, %s]  (SE=%s)",
+              fmt(o$OA_near), fmt(o$OA_near_lo), fmt(o$OA_near_hi), fmt(o$OA_near_se, 4)),
+      sprintf("  Area REFERENCE (bias-adjusted, what is really there) = %s [%s, %s]  (SE=%s) = %s ha [%s, %s]",
+              fmt(a$area_prop_retama), fmt(a$area_lo), fmt(a$area_hi), fmt(a$area_se, 4),
+              fmt(a$area_ha, 0), fmt(a$area_ha_lo, 0), fmt(a$area_ha_hi, 0)),
+      sprintf("  Area MAPPED    (extent of the map itself)             = %s [%s, %s]  (SE=%s) = %s ha [%s, %s]",
+              fmt(a$area_map_prop), fmt(a$area_map_lo), fmt(a$area_map_hi), fmt(a$area_map_se, 4),
+              fmt(a$area_map_ha, 0), fmt(a$area_map_ha_lo, 0), fmt(a$area_map_ha_hi, 0)),
+      "    ^ compare the MAPPED row with the pixel count from 13_areaAudit.js §3",
       "")
   }
 }
@@ -847,7 +1101,19 @@ for (yr in YEARS) {
   dg <- c(dg, sprintf("## Inter-observer %d: n_pairs=%d  agreement=%s  kappa=%s  (both_retama=%d, split=%d, both_noret=%d)",
     yr, k$n_pairs, fmt(k$pct_agreement), fmt(k$kappa), k$both_retama, k$split, k$both_noret))
 }
-dg <- c(dg, "", "## Confidence-lattice figures (figures 1 & 2): grid (pairs) + marginal band (singles)")
+dg <- c(dg, "",
+  sprintf("## Disagreement recovery (odds ratio >= %g on p = conf/11) — whose label was kept",
+          OR_THRESHOLD),
+  "  rows = label KEPT, cols = label DROPPED (both years pooled):")
+mm <- as.data.frame.matrix(recovery_mat)
+dg <- c(dg, sprintf("  %-8s %s", "", paste(sprintf("%8s", colnames(mm)), collapse = "")))
+for (i in seq_len(nrow(mm)))
+  dg <- c(dg, sprintf("  %-8s %s", rownames(mm)[i],
+                      paste(sprintf("%8d", as.integer(mm[i, ])), collapse = "")))
+dg <- c(dg, sprintf("  kept totals: %s | dropped totals: %s",
+                    paste(sprintf("%s=%d", rownames(mm), rowSums(mm)), collapse = ", "),
+                    paste(sprintf("%s=%d", colnames(mm), colSums(mm)), collapse = ", ")),
+        "", "## Confidence-lattice figures (figures 1 & 2): grid (pairs) + marginal band (singles)")
 for (yr in YEARS) {
   b <- bubble_tabs[[as.character(yr)]]; v <- votegrid_tabs[[as.character(yr)]]
   bp <- b[b$region == "pair", ]; bs <- b[b$region == "single", ]
@@ -891,14 +1157,15 @@ for (yr in YEARS) {
             fmt(100 * ifelse(is.na(sts[["correct"]]), 0, sts[["correct"]]) / nsin, 1),
             ifelse(is.na(sts[["incorrect"]]), 0, sts[["incorrect"]]),
             fmt(100 * ifelse(is.na(sts[["incorrect"]]), 0, sts[["incorrect"]]) / nsin, 1)),
-    sprintf("  check: n_pairs(%d) = n_agree(%d, correct+incorrect above) + n_disagree(%d, qc, discarded from usable): %s",
-            ntot, st[["correct"]] + st[["incorrect"]], qc$n_disagree,
-            ifelse(st[["correct"]] + st[["incorrect"]] + qc$n_disagree == ntot, "OK", "MISMATCH")),
-    sprintf("  check: n_agree(%d) + n_single_design(%d) + n_single_partial(%d) = %d, n_usable(%d): %s",
-            st[["correct"]] + st[["incorrect"]], qc$n_single_design, qc$n_single_partial,
-            st[["correct"]] + st[["incorrect"]] + qc$n_single_design + qc$n_single_partial, qc$n_usable,
-            ifelse(st[["correct"]] + st[["incorrect"]] + qc$n_single_design + qc$n_single_partial == qc$n_usable,
-                   "OK", "MISMATCH")),
+    sprintf("  note: the grid counts EVERY loaded pair (incl. the low-conf ones dropped from `usable`), so its status totals no longer add up to n_usable on their own."),
+    (function() {
+      ay <- ana[ana$year == yr, ]
+      nag <- sum(ay$status == "agree"); nrc <- sum(ay$status == "recovered")
+      tot <- nag + nrc + qc$n_single_design + qc$n_single_partial
+      sprintf("  check: n_usable(%d) = agree(%d) + recovered(%d) + single_design(%d) + single_partial(%d) = %d: %s",
+              qc$n_usable, nag, nrc, qc$n_single_design, qc$n_single_partial, tot,
+              ifelse(tot == qc$n_usable, "OK", "MISMATCH"))
+    })(),
     "")
 }
 writeLines(dg, file.path(OUT_DIR, "09v_metrics_digest.md"))
