@@ -64,10 +64,32 @@
 var ASSET_PREFIX    = 'projects/ee-licanemartinez/assets/Retamap/';
 var DRIVE_FOLDER    = 'Retamap/Retamap_GEE_Exports';
 
-// Interactive prints can time out on the 10 m full-ROI reductions. Flip this to
-// true to also run the whole audit as a batch task (no time limit) that writes a
-// tidy CSV to Drive. The printed and exported numbers are identical.
+// ── How to run ───────────────────────────────────────────────────────────────
+// The 10 m full-ROI reductions are heavy — section 5 in particular has to
+// evaluate a 500 m focal_max (a 101 x 101 kernel) over ~2.5e8 pixels, in a
+// reprojected grid. Interactively that hits the Code Editor's memory/time limits
+// ("User memory limit exceeded" / "Computation timed out").
+//
+// So the intended way to run this is as BATCH TASKS, which have far higher
+// limits and leave the numbers in a file instead of a console you have to copy:
+//
+//     EXPORT_TO_DRIVE = true;  RUN_PRINTS = false;   → Tasks tab → Run all
+//
+// One task PER SECTION, so a section that blows up does not take the others with
+// it, and you can re-run just that one with a bigger TILE_SCALE.
 var EXPORT_TO_DRIVE = false;
+var RUN_PRINTS      = true;
+
+// Raise this if a task fails with "User memory limit exceeded": it splits each
+// reduction into more, smaller pieces (slower, much less memory). 16 is already
+// conservative; 32 and 64 are legal and worth trying before giving up.
+var TILE_SCALE = 16;
+
+// Section 5 can also recompute the weights on the native EPSG:4326 grid as a
+// cross-check. It doubles the most expensive work in the script, so it is off by
+// default — the UTM19S numbers are the ones that matter (that is the grid the
+// points were drawn on).
+var WEIGHTS_ON_GRID_A = false;
 
 var RUN_SUFFIX = '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k';
 
@@ -99,15 +121,22 @@ var roiGeom = roi.geometry();
 // hand from the GEE console on 2026-08-07. These are the numbers under audit.
 var OLD_AREA_M2 = {s1: 55178037, s2: 591685230, s3: 9273053977};
 
-// Rows accumulated across all sections -> one print, one optional CSV.
-var auditRows = [];
+// Rows bucketed BY SECTION, so each one exports as its own independent task.
+var auditRows = {};
 var row = function(section, metric, value) {
-  auditRows.push(ee.Feature(null, {
+  if (!auditRows[section]) auditRows[section] = [];
+  auditRows[section].push(ee.Feature(null, {
     section: section,
     metric : metric,
     value  : value
   }));
   return value;
+};
+
+// print() that RUN_PRINTS can silence, so the export-only run does not spend the
+// interactive budget computing numbers it is about to compute again in batch.
+var say = function() {
+  if (RUN_PRINTS) print.apply(null, Array.prototype.slice.call(arguments));
 };
 
 
@@ -126,10 +155,10 @@ var map2025 = finalMap(VAL_YEARS[1]);
 // projA = "grid A", the native grid the maps were classified and stored on.
 var projA = map2017.projection();
 
-print('--- 1. GRIDS -------------------------------------------------------');
-print('08_RF2_prediction_2017 projection:', projA);
-print('08_RF2_prediction_2017 nominalScale (m):', projA.nominalScale());
-print('01_MergedBands_2017 projection:',
+say('--- 1. GRIDS -------------------------------------------------------');
+say('08_RF2_prediction_2017 projection:', projA);
+say('08_RF2_prediction_2017 nominalScale (m):', projA.nominalScale());
+say('01_MergedBands_2017 projection:',
       ee.Image(ASSET_PREFIX + '01_MergedBands_' + VAL_YEARS[0]).projection());
 
 // True ground area of one native pixel, sampled at the ROI centroid. If the
@@ -140,7 +169,7 @@ var pixAreaHere = ee.Image.pixelArea().reduceRegion({
   crs      : projA,
   maxPixels: 1e6
 }).get('area');
-print('Ground area of ONE native pixel at the ROI centroid (m2):', pixAreaHere);
+say('Ground area of ONE native pixel at the ROI centroid (m2):', pixAreaHere);
 row(1, 'native_pixel_area_m2_at_roi_centroid', pixAreaHere);
 
 // Empirical check of the presence-only claim: for a presence-only asset the
@@ -148,11 +177,11 @@ row(1, 'native_pixel_area_m2_at_roi_centroid', pixAreaHere);
 // stored, the mask footprint would cover the whole ROI instead.
 var maskedFootprint = ee.Image.pixelArea().updateMask(map2017.mask())
   .reduceRegion({reducer: ee.Reducer.sum(), geometry: roiGeom, crs: projA,
-                 maxPixels: 1e13, tileScale: 4}).get('area');
+                 maxPixels: 1e13, tileScale: TILE_SCALE}).get('area');
 var onesFootprint = ee.Image.pixelArea().updateMask(map2017.unmask(0).eq(1))
   .reduceRegion({reducer: ee.Reducer.sum(), geometry: roiGeom, crs: projA,
-                 maxPixels: 1e13, tileScale: 4}).get('area');
-print('Presence-only check 2017 -- valid-data area vs "==1" area (m2). ' +
+                 maxPixels: 1e13, tileScale: TILE_SCALE}).get('area');
+say('Presence-only check 2017 -- valid-data area vs "==1" area (m2). ' +
       'Equal => the asset stores ONLY retama; class 0 is nodata:',
       ee.Dictionary({valid_data: maskedFootprint, equals_one: onesFootprint}));
 row(1, 'map2017_valid_data_area_m2', maskedFootprint);
@@ -166,10 +195,10 @@ row(1, 'map2017_equals_one_area_m2', onesFootprint);
 // validation divides by ~991,992 ha (the valid-observation footprint, after the
 // water and elevation masks of 01_sentinelMosaic.js). They are not the same
 // thing and a percentage is meaningless until you say which one it is over.
-print('--- 2. DENOMINATORS ------------------------------------------------');
+say('--- 2. DENOMINATORS ------------------------------------------------');
 
 var roiPolyArea = roiGeom.area(1);
-print('ROI polygon area (ha) -- compare with the 2,469,653 ha in the paper:',
+say('ROI polygon area (ha) -- compare with the 2,469,653 ha in the paper:',
       roiPolyArea.divide(1e4));
 row(2, 'roi_polygon_area_ha', roiPolyArea.divide(1e4));
 
@@ -184,14 +213,14 @@ var dataMaskAreaAt = function(s) {
     geometry : roiGeom,
     scale    : s,
     maxPixels: 1e13,
-    tileScale: 4
+    tileScale: TILE_SCALE
   }).get('area')).divide(1e4);
 };
 var dmDict = {};
 SCALES.forEach(function(s) {
   dmDict['scale_' + s] = row(2, 'dataMask_area_ha_at_scale_' + s, dataMaskAreaAt(s));
 });
-print('Valid-observation footprint (ha) by measuring scale. This is the ' +
+say('Valid-observation footprint (ha) by measuring scale. This is the ' +
       'denominator the validation uses (TOTAL_HA = 991,992 today):',
       ee.Dictionary(dmDict));
 
@@ -205,7 +234,7 @@ print('Valid-observation footprint (ha) by measuring scale. This is the ' +
 //
 // (b) / (a) should land near cos(latitude) ~ 0.75 if the EPSG:4326 pixel-shape
 // effect is the only difference.
-print('--- 3. MAPPED AREA PER YEAR (native resolution) --------------------');
+say('--- 3. MAPPED AREA PER YEAR (native resolution) --------------------');
 
 var retamaMask = function(year) {
   return finalMap(year).unmask(0).eq(1);
@@ -221,7 +250,7 @@ var areaCountNominal = function(mask) {
       geometry : roiGeom,
       crs      : projA,
       maxPixels: 1e13,
-      tileScale: 4
+      tileScale: TILE_SCALE
     }).get('n')).multiply(100).divide(1e4);
 };
 
@@ -234,7 +263,7 @@ var areaTrueOn = function(mask, proj) {
     geometry : roiGeom,
     crs      : proj,
     maxPixels: 1e13,
-    tileScale: 4
+    tileScale: TILE_SCALE
   }).get('area')).divide(1e4);
 };
 
@@ -249,7 +278,7 @@ YEARS.forEach(function(y) {
   });
   perYear['y' + y] = ha;
 });
-print('Mapped retama area (ha) per year, three conventions. Compare with the ' +
+say('Mapped retama area (ha) per year, three conventions. Compare with the ' +
       'paper: 2017 ~1370 ha, 2025 ~1080 ha (Fig. 2A):',
       ee.Dictionary(perYear));
 
@@ -261,7 +290,7 @@ print('Mapped retama area (ha) per year, three conventions. Compare with the ' +
 // measured with the generator's own code path, varying only `scale`. If the
 // pyramid hypothesis is right, S1 inflates monotonically with coarser scale and
 // the value at 100 m is several times the value at 10 m.
-print('--- 4. SCALE LADDER (the test) -------------------------------------');
+say('--- 4. SCALE LADDER (the test) -------------------------------------');
 
 var m17b = map2017.unmask(0);
 var m25b = map2025.unmask(0);
@@ -284,38 +313,65 @@ var buildStratum = function(retamaImg, nearImg) {
 };
 var stratum = buildStratum(isRetama, isNear);
 
-// The generator's areaOfStratum, verbatim except that `scale` is a parameter.
-var areaOfStratumAtScale = function(s, sc) {
-  return ee.Number(ee.Image.pixelArea()
-    .updateMask(stratum.eq(s))
-    .reduceRegion({
-      reducer  : ee.Reducer.sum(),
-      geometry : roiGeom,
-      scale    : sc,
-      maxPixels: 1e13,
-      tileScale: 4
-    }).get('area'));
+// All three strata in ONE grouped reduction. Same numbers as the generator's
+// three separate reduceRegion calls, but `stratum` — which carries the 500 m
+// focal_max — is evaluated once per scale instead of three times. That matters:
+// at 10 m the focal_max is a 101 x 101 kernel over ~2.5e8 pixels, and it is what
+// pushes this script into the memory limit.
+//
+// `grid` selects the measuring geometry: {scale: n} reproduces the generator's
+// own code path (no crs → the asset's EPSG:4326 grid, resampled), {crs: proj}
+// pins the reduction to that projection's own transform with no resampling.
+var strataAreas = function(grid) {
+  var params = {
+    reducer  : ee.Reducer.sum().group({groupField: 1, groupName: 'stratum'}),
+    geometry : roiGeom,
+    maxPixels: 1e13,
+    tileScale: TILE_SCALE
+  };
+  if (grid.scale !== undefined) params.scale = grid.scale;
+  if (grid.crs   !== undefined) params.crs   = grid.crs;
+
+  var groups = ee.List(ee.Image.pixelArea().addBands(stratum)
+    .reduceRegion(params).get('groups'));
+  var d = ee.Dictionary.fromLists(
+    groups.map(function(o) {
+      return ee.Number(ee.Dictionary(o).get('stratum')).format('%d');
+    }),
+    groups.map(function(o) { return ee.Dictionary(o).get('sum'); })
+  );
+  // a stratum with zero pixels simply does not appear in the group list
+  var pick = function(k) {
+    return ee.Number(ee.Algorithms.If(d.contains(k), d.get(k), 0));
+  };
+  return {s1: pick('1'), s2: pick('2'), s3: pick('3')};
 };
 
 var ladder = {};
+var ladderRaw = {};
 SCALES.forEach(function(sc) {
+  var a = strataAreas({scale: sc});
+  ladderRaw[sc] = a;
   ladder['scale_' + sc] = ee.Dictionary({
-    S1_ha: row(4, 'S1_ha_at_scale_' + sc, areaOfStratumAtScale(1, sc).divide(1e4)),
-    S2_ha: row(4, 'S2_ha_at_scale_' + sc, areaOfStratumAtScale(2, sc).divide(1e4)),
-    S3_ha: row(4, 'S3_ha_at_scale_' + sc, areaOfStratumAtScale(3, sc).divide(1e4))
+    S1_ha: row(4, 'S1_ha_at_scale_' + sc, a.s1.divide(1e4)),
+    S2_ha: row(4, 'S2_ha_at_scale_' + sc, a.s2.divide(1e4)),
+    S3_ha: row(4, 'S3_ha_at_scale_' + sc, a.s3.divide(1e4))
   });
 });
-print('Stratum areas (ha) vs measuring scale. Today the generator reports the ' +
+say('Stratum areas (ha) vs measuring scale. Today the generator reports the ' +
       'scale_100 row (S1 = 5518 ha). Monotonic growth of S1 with scale ' +
       'CONFIRMS the pyramid hypothesis:',
       ee.Dictionary(ladder));
 
-// Inflation factor of the current setting relative to native resolution.
-var s1At10  = areaOfStratumAtScale(1, 10);
-var s1At100 = areaOfStratumAtScale(1, 100);
-print('S1 inflation factor, scale 100 / scale 10 (1.0 would refute the ' +
-      'hypothesis):', s1At100.divide(s1At10));
-row(4, 'S1_inflation_factor_100_over_10', s1At100.divide(s1At10));
+// Inflation factor of the setting the generator used (100 m) relative to native
+// resolution. Reuses the ladder's own numbers — no extra reduction.
+if (ladderRaw[10] && ladderRaw[100]) {
+  var infl = ladderRaw[100].s1.divide(ladderRaw[10].s1);
+  say('S1 inflation factor, scale 100 / scale 10 (1.0 would refute the ' +
+      'hypothesis; ~2.9 would mean the paper\'s per-year areas are the good ' +
+      'ones):', infl);
+  row(4, 'S1_inflation_factor_100_over_10', infl);
+}
 
 
 // =============================================================================
@@ -324,14 +380,14 @@ row(4, 'S1_inflation_factor_100_over_10', s1At100.divide(s1At10));
 // The points were drawn with `scale: 10, projection: UTM19S`
 // (09v_valGenerator.js:304-305). For the Olofsson estimator the weights must
 // describe the SAME strata the points were drawn from, so the UTM19S @10 m row
-// below is the one to trust. The grid-A row is reported to show the two agree up
-// to the pixel-shape effect.
-print('--- 5. RECOMPUTED Wi -----------------------------------------------');
+// below is the one to trust. Set WEIGHTS_ON_GRID_A to also get the native-grid
+// cross-check (they should differ only by the EPSG:4326 pixel-shape factor), at
+// the cost of doubling the most expensive work in the script.
+say('--- 5. RECOMPUTED Wi -----------------------------------------------');
 
 var weightsOn = function(proj, tag) {
-  var a1 = areaTrueOn(stratum.eq(1), proj).multiply(1e4);   // back to m2
-  var a2 = areaTrueOn(stratum.eq(2), proj).multiply(1e4);
-  var a3 = areaTrueOn(stratum.eq(3), proj).multiply(1e4);
+  var a  = strataAreas({crs: proj});      // one grouped reduction, in m2
+  var a1 = a.s1, a2 = a.s2, a3 = a.s3;
   var aT = a1.add(a2).add(a3);
   row(5, tag + '_S1_area_m2', a1);
   row(5, tag + '_S2_area_m2', a2);
@@ -351,13 +407,15 @@ var weightsOn = function(proj, tag) {
   });
 };
 
-print('>> PASTE THESE into 09v_valAnalysis_compute.R section 0 ' +
+say('>> PASTE THESE into 09v_valAnalysis_compute.R section 0 ' +
       '(UTM19S @10 m -- the grid the points were drawn on):',
       weightsOn(UTM19S.atScale(10), 'utm19s10'));
-print('Same on the native grid A (cross-check; should differ only by the ' +
+if (WEIGHTS_ON_GRID_A) {
+  say('Same on the native grid A (cross-check; should differ only by the ' +
       'EPSG:4326 pixel-shape factor):',
       weightsOn(projA, 'gridA'));
-print('Currently in the R (measured at scale 100) -- m2:', OLD_AREA_M2);
+}
+say('Currently in the R (measured at scale 100) -- m2:', OLD_AREA_M2);
 
 
 // =============================================================================
@@ -365,7 +423,7 @@ print('Currently in the R (measured at scale 100) -- m2:', OLD_AREA_M2);
 // =============================================================================
 // These do not depend on the hypothesis being right. If they fail, the problem
 // is in how `stratum` is assembled, not in the measuring scale.
-print('--- 6. CONSISTENCY CHECKS ------------------------------------------');
+say('--- 6. CONSISTENCY CHECKS ------------------------------------------');
 
 var proj10 = UTM19S.atScale(10);
 
@@ -375,13 +433,13 @@ var aUnion = areaTrueOn(retamaMask(VAL_YEARS[0]).or(retamaMask(VAL_YEARS[1])), p
 var aInter = areaTrueOn(retamaMask(VAL_YEARS[0]).and(retamaMask(VAL_YEARS[1])), proj10);
 var aS1    = areaTrueOn(stratum.eq(1), proj10);
 
-print('Check A -- S1 must equal area(2017 union 2025). Difference in ha ' +
+say('Check A -- S1 must equal area(2017 union 2025). Difference in ha ' +
       '(0 expected; non-zero means the dataMask clips part of S1):',
       aS1.subtract(aUnion));
-print('Check B -- inclusion-exclusion, A(2017)+A(2025)-A(inter)-A(union). ' +
+say('Check B -- inclusion-exclusion, A(2017)+A(2025)-A(inter)-A(union). ' +
       'Difference in ha (0 expected):',
       a2017.add(a2025).subtract(aInter).subtract(aUnion));
-print('Areas (ha) 2017 / 2025 / union / intersection. The intersection is the ' +
+say('Areas (ha) 2017 / 2025 / union / intersection. The intersection is the ' +
       'part of the map stable across the series endpoints:',
       ee.Dictionary({y2017: a2017, y2025: a2025, union: aUnion, inter: aInter}));
 
@@ -401,7 +459,7 @@ row(6, 'area_ha_inter_2017_2025', aInter);
 // reproduces the paper's ~1370 ha for 2017, the problem is downstream; if the
 // native number in section 3 already is ~1370 ha, then the downstream analysis
 // is right and the only thing broken is the generator.
-print('--- 7. 1 km AGGREGATION PATH ---------------------------------------');
+say('--- 7. 1 km AGGREGATION PATH ---------------------------------------');
 
 var oneKm = function(year) {
   var m = retamaMask(year);
@@ -416,7 +474,7 @@ var oneKm = function(year) {
     .reproject({crs: UTM19S, scale: 1000});
   var haCorrect = ee.Number(frac.multiply(ee.Image.pixelArea()).reduceRegion({
     reducer: ee.Reducer.sum(), geometry: roiGeom, crs: UTM19S, scale: 1000,
-    maxPixels: 1e13, tileScale: 4
+    maxPixels: 1e13, tileScale: TILE_SCALE
   }).get('area')).divide(1e4);
 
   // Naive route: reproject straight to 1 km with no reduceResolution, so EE
@@ -426,7 +484,7 @@ var oneKm = function(year) {
     .updateMask(m.reproject({crs: UTM19S, scale: 1000}))
     .reduceRegion({
       reducer: ee.Reducer.sum(), geometry: roiGeom, crs: UTM19S, scale: 1000,
-      maxPixels: 1e13, tileScale: 4
+      maxPixels: 1e13, tileScale: TILE_SCALE
     }).get('area')).divide(1e4);
 
   row(7, 'area_ha_' + year + '_1km_reduceResolution', haCorrect);
@@ -436,7 +494,7 @@ var oneKm = function(year) {
 
 var kmDict = {};
 VAL_YEARS.forEach(function(y) { kmDict['y' + y] = oneKm(y); });
-print('Mapped area (ha) via the 1 km grid, correct vs naive aggregation:',
+say('Mapped area (ha) via the 1 km grid, correct vs naive aggregation:',
       ee.Dictionary(kmDict));
 
 if (CHECK_GRID_FC) {
@@ -448,10 +506,10 @@ if (CHECK_GRID_FC) {
         collection: grid,
         reducer   : ee.Reducer.sum(),
         crs       : proj10,
-        tileScale : 4
+        tileScale : TILE_SCALE
       });
     var tot = ee.Number(perCell.aggregate_sum('sum')).divide(1e4);
-    print('Mapped area (ha) ' + y + ' summed over ' + GRID_FC_ASSET + ':', tot);
+    say('Mapped area (ha) ' + y + ' summed over ' + GRID_FC_ASSET + ':', tot);
     row(7, 'area_ha_' + y + '_gridFC_sum', tot);
   });
 }
@@ -460,17 +518,23 @@ if (CHECK_GRID_FC) {
 // =============================================================================
 // 8. TIDY OUTPUT
 // =============================================================================
-var auditFc = ee.FeatureCollection(auditRows);
-print('--- 8. ALL ROWS ----------------------------------------------------');
-print('Full audit table (section, metric, value):', auditFc);
+// One task per section. Independent on purpose: sections 5 and 6 do the heavy
+// 10 m work (section 5 also carries the 500 m focal_max), so if one of them
+// exceeds the memory limit the cheap sections still deliver their numbers, and
+// the expensive one can be re-run alone with a bigger TILE_SCALE.
+say('--- 8. ALL ROWS ----------------------------------------------------');
 
-if (EXPORT_TO_DRIVE) {
-  Export.table.toDrive({
-    collection    : auditFc,
-    description   : 'Export_13_areaAudit',
-    folder        : DRIVE_FOLDER,
-    fileNamePrefix: '13_areaAudit' + RUN_SUFFIX,
-    fileFormat    : 'CSV',
-    selectors     : ['section', 'metric', 'value']
-  });
-}
+Object.keys(auditRows).sort().forEach(function(sec) {
+  var fc = ee.FeatureCollection(auditRows[sec]);
+  say('Section ' + sec + ':', fc);
+  if (EXPORT_TO_DRIVE) {
+    Export.table.toDrive({
+      collection    : fc,
+      description   : 'Export_13_areaAudit_s' + sec,
+      folder        : DRIVE_FOLDER,
+      fileNamePrefix: '13_areaAudit_s' + sec + RUN_SUFFIX,
+      fileFormat    : 'CSV',
+      selectors     : ['section', 'metric', 'value']
+    });
+  }
+});

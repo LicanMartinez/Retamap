@@ -171,16 +171,30 @@ var stratStack = stratum
 // correspondence on top of the pyramid inflation described at AREA_SCALE.
 var AREA_PROJ = UTM19S.atScale(AREA_SCALE);
 
+// All three strata in ONE grouped reduction rather than three masked ones. At
+// 10 m that is not a nicety: `stratum` carries the 500 m focal_max (a 101 x 101
+// kernel) over ~2.5e8 pixels, so evaluating it three times runs into the memory
+// limit. Raise tileScale if it still does.
+var stratumAreaGroups = ee.List(
+  ee.Image.pixelArea().addBands(stratum).reduceRegion({
+    reducer  : ee.Reducer.sum().group({groupField: 1, groupName: 'stratum'}),
+    geometry : roiGeom,
+    crs      : AREA_PROJ,
+    maxPixels: 1e13,
+    tileScale: 16
+  }).get('groups'));
+
+var areaByStratum = ee.Dictionary.fromLists(
+  stratumAreaGroups.map(function(o) {
+    return ee.Number(ee.Dictionary(o).get('stratum')).format('%d');
+  }),
+  stratumAreaGroups.map(function(o) { return ee.Dictionary(o).get('sum'); })
+);
+// a stratum with no pixels simply does not appear among the groups
 var areaOfStratum = function(s) {
-  return ee.Number(ee.Image.pixelArea()
-    .updateMask(stratum.eq(s))
-    .reduceRegion({
-      reducer  : ee.Reducer.sum(),
-      geometry : roiGeom,
-      crs      : AREA_PROJ,
-      maxPixels: 1e13,
-      tileScale: 4
-    }).get('area'));
+  var k = String(s);
+  return ee.Number(ee.Algorithms.If(
+    areaByStratum.contains(k), areaByStratum.get(k), 0));
 };
 var a1 = areaOfStratum(1), a2 = areaOfStratum(2), a3 = areaOfStratum(3);
 print('Stratum areas (m^2):', ee.Dictionary({s1: a1, s2: a2, s3: a3}));
