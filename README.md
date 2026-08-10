@@ -12,8 +12,9 @@ reference polygons, and a second model (RF2) trained on temporally **stable
 samples** derived from the multi-year RF1 series.
 
 > **Sentinel-2 note:** Processing Baseline 04.00 (scenes after 2022-01-25)
-> introduced a +1000 DN offset; bands B2/B3/B4/B8 are corrected by subtracting
-> 1000.
+> introduced a +1000 DN offset. The pipeline applies **no** correction of its own:
+> the `_HARMONIZED` collection already shifts post-baseline scenes back onto the
+> pre-baseline scale.
 
 ## Citation
 ...
@@ -57,7 +58,9 @@ Run order: **01 → 02 → 03 → 04 → 05 → 06 → 07 → 08**. Independent 
 This is the authoritative configuration that produced the published results
 (`RUN_SUFFIX = _trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k`):
 
-- **Imagery:** Sentinel-2 L2A harmonized (`COPERNICUS/S2_HARMONIZED`), 10 m;
+- **Imagery:** Sentinel-2 harmonized **Level-1C / top-of-atmosphere**
+  (`COPERNICUS/S2_HARMONIZED` — the surface-reflectance archive would be
+  `COPERNICUS/S2_SR_HARMONIZED`), 10 m;
   scenes > 40 % cloud discarded; Cloud Score+ clear-sky threshold 0.6. Ten-band
   feature stack: B2, B3, B4, B8 + NDYI for each of the two seasonal composites.
 - **RF1:** 500 trees (`smileRandomForest`); stratified sampling of
@@ -111,6 +114,7 @@ the blind asset `09v_valPoints_fc`. Results are in preparation.
 │                                                 #   frozen validation points (paired, McNemar)
 ├── 11_predsVisualizer.js, 11.2_…finalSeries.js   # visualization
 ├── 12_gridExport.js                              # analysis grid
+├── 13_areaAudit.js                               # area diagnostics (prints only, creates no assets)
 ├── r_analysis/                                   # downstream R analysis (occupation, drivers, management)
 ├── explorations/                                 # side explorations: run, validated, NOT adopted (see its README)
 ├── experimental/                                 # scratch forks, never evaluated (untracked)
