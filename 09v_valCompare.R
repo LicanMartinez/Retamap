@@ -28,7 +28,7 @@
 #
 # The catch, stated in the report: power is uneven. Retama an arm adds OUTSIDE
 # the canonical S1 is only sampled through S2 (400 pts) and S3 (119 pts covering
-# 93.5% of the ROI), so a new arm's commission in those areas carries very wide
+# 92.5% of the ROI), so a new arm's commission in those areas carries very wide
 # intervals.
 # =============================================================================
 

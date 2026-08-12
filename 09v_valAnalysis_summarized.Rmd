@@ -70,6 +70,14 @@ particionan toda el área válida del ROI (tierra firme, sin agua ni cotas > 110
 Dentro de cada estrato los puntos se sortearon al azar con ~500 m de separación mínima. S1 se
 asignó a **2 validadores** (es donde se juega la exactitud del mapa) y S2/S3 a **1**.
 
+> **Áreas y pesos corregidos el 2026-08-11.** Las versiones previas de este reporte usaban
+> áreas medidas a 100 m de resolución, que inflaban S1 a 5518 ha (factor 4,4). El mapa final es
+> un ráster *presence-only* —el fondo es *nodata*, no 0—, así que al medirlo a escala gruesa
+> Earth Engine lo lee desde su pirámide y un solo píxel de 10 m pinta la celda entera. Las áreas
+> de arriba se midieron a 10 m en UTM19S, la misma grilla en la que se sortearon los puntos, como
+> exige Olofsson. **Los puntos, sus estratos y las etiquetas no cambiaron**: la corrección afecta
+> únicamente a las métricas ponderadas y al área. Diagnóstico completo en `13_areaAudit.js`.
+
 ## Cómo se construye la etiqueta de referencia
 
 Por cada punto y año, a partir de los validadores que el master key le asigna:
@@ -174,11 +182,17 @@ pares disponibles para el kappa y para el criterio de consenso.
 - **Omisión de retama** (retama que el mapa no marcó):
   `r pctci(o17$OE_retama, o17$OE_retama_lo, o17$OE_retama_hi)` en 2017 y
   `r pctci(o25$OE_retama, o25$OE_retama_lo, o25$OE_retama_hi)` en 2025 ponderada, contra
-  `r ci_of("OE_retama", 2017)` y `r ci_of("OE_retama", 2025)` cruda. El mapa detecta bien las
-  manchas consolidadas y se pierde la retama dispersa o incipiente del entorno.
-- **Área de retama:** `r haci(a17$area_ha, a17$area_ha_lo, a17$area_ha_hi)` en 2017 y
+  `r ci_of("OE_retama", 2017)` y `r ci_of("OE_retama", 2025)` cruda. Lo que el mapa marca es
+  mayormente retama de verdad, pero es solo una fracción de la que hay: la omisión vive casi
+  entera en S2, donde la retama es dispersa o incipiente y cada punto muestreado representa
+  ~`r round(ha_per_pt_s2/ha_per_pt_s1)` veces más superficie.
+- **Área de retama:** la referencia estima
+  `r haci(a17$area_ha, a17$area_ha_lo, a17$area_ha_hi)` en 2017 y
   `r haci(a25$area_ha, a25$area_ha_lo, a25$area_ha_hi)` en 2025 (sobre
-  `r hanum(TOTAL_HA)` ha de área válida) — **indistinguibles entre sí**.
+  `r hanum(TOTAL_HA)` ha de área válida) — **indistinguibles entre sí**. El mapa, en cambio,
+  marca `r haci(a17$area_map_ha, a17$area_map_ha_lo, a17$area_map_ha_hi)` y
+  `r haci(a25$area_map_ha, a25$area_map_ha_lo, a25$area_map_ha_hi)`: la brecha entre ambas
+  cifras **es** la omisión, y es la razón por la que no deben confundirse.
 - **Exactitud global**, en sus tres lecturas (2017):
   `r ci_of("OA", 2017)` cruda · `r pctci(o17$OA_near, o17$OA_near_lo, o17$OA_near_hi)` ponderada
   restringida a S1∪S2 · `r pctci(o17$OA, o17$OA_lo, o17$OA_hi)` ponderada de todo el ROI. La
@@ -280,11 +294,25 @@ cat(knitr::kable(od, caption = "Ponderado por área. \"OA S1+S2\" renormaliza lo
 cat("\n\n")
 a <- olofsson_area_df
 ad <- data.frame(Año = a$year,
-  `Área de retama (IC95%)` = mapply(haci, a$area_ha, a$area_ha_lo, a$area_ha_hi),
-  `% del ROI` = pct(a$area_prop_retama),
+  `Área real de retama (IC95%)` = mapply(haci, a$area_ha, a$area_ha_lo, a$area_ha_hi),
+  `Área que marca el mapa (IC95%)` = mapply(haci, a$area_map_ha, a$area_map_ha_lo, a$area_map_ha_hi),
+  `% del ROI (real)` = pct(a$area_prop_retama),
   check.names = FALSE, row.names = NULL)
-cat(knitr::kable(ad, caption = "Área estimada de retama (estimador estratificado sobre la referencia, no el conteo de píxeles del mapa)."), sep = "\n")
+cat(knitr::kable(ad, caption = "Dos cantidades distintas: la superficie de retama que la referencia dice que existe (corregida por sesgo) y la superficie que el mapa efectivamente marca."), sep = "\n")
 ```
+
+Las dos columnas responden preguntas distintas y **no** son intercambiables. La primera estima
+**cuánta retama hay** — es el estimador de Olofsson sobre la etiqueta de referencia, así que
+corrige tanto la comisión como la omisión del mapa. La segunda estima **cuánta retama dibuja el
+mapa**, y es la que se compara con un conteo de píxeles.
+
+Esa segunda columna sirve además como control externo del diseño: la integración directa del
+área de los píxeles sobre todo el ROI (`13_areaAudit.js` §3, en UTM19S a 10 m) da
+**922 ha en 2017** y **723 ha en 2025**, ambas dentro del IC estimado desde los
+`r sum(mk$stratum %in% 1:3)` puntos. Dos rutas independientes —una muestral, una censal—
+coinciden.
+
+La brecha entre ambas columnas es la omisión: el mapa marca menos superficie de la que hay.
 
 La comisión casi no cambia al ponderar. La **omisión sí se duplica**, por el mecanismo explicado
 en §1: los `r fn_s2_17` puntos de S2 con retama omitida (2017) y `r fn_s2_25` (2025) representan

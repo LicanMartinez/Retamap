@@ -16,7 +16,7 @@
 // Evaluating a different map on this sample stays unbiased — strata and Wi are
 // properties of the sampling DESIGN, not of the map — but power is uneven: any
 // retama a variant adds OUTSIDE the canonical S1 is only sampled through S2
-// (400 pts) and S3 (119 pts covering 93.5% of the ROI). The comparison report
+// (400 pts) and S3 (119 pts covering 92.5% of the ROI). The comparison report
 // states this as a limitation.
 //
 // CONTROL COLUMN (the whole point of including the canonical map here)

@@ -68,22 +68,40 @@ OUT_DIR <- if (nzchar(VARIANT_TAG)) {
   file.path(WORK_DIR, "analysis")
 }
 
-# Stratum AREA WEIGHTS Wi (proportion of ROI area in each stratum), printed by
-# 09v_valGenerator.js section 5 ("Wi ... suma~1") in the GEE console.
+# Stratum AREA WEIGHTS Wi (proportion of ROI area in each stratum).
 # Fill all three to enable the Olofsson area-weighted estimator.
 # Leave any as NA -> only the crude (sample-based) metrics are produced.
-# Loaded 2026-08-07 from the GEE console. Stratum areas (m^2) behind them:
-#   S1 =    55,178,037   S2 =   591,685,230   S3 = 9,273,053,977   (sum ~ 9.92e9)
-# S3 is 93.5% of the ROI, so the area-weighted estimator is dominated by the far
-# background — which is exactly why the crude metrics overstate the error.
-Wi <- c(S1 = 0.005562348528027356,
-        S2 = 0.059646186135871575,
-        S3 = 0.934791465336101)
+#
+# CORRECTED 2026-08-11. Source: 13_areaAudit.js section 5, row group
+# "utm19s10_*" -- areas measured at 10 m in UTM19S, i.e. the SAME grid the 919
+# points were drawn on (stratifiedSample runs at scale 10, projection UTM19S).
+# Olofsson requires the weights and the sample to live on one grid; they did not.
+#
+# The superseded values below came from 09v_valGenerator.js section 5 with
+# AREA_SCALE = 100 and no crs. They are inflated, badly and non-uniformly:
+# 08_RF2_prediction is a PRESENCE-ONLY raster (background is nodata, not 0), so
+# coarsening makes EE read it from an image pyramid where the mean over *valid*
+# pixels is 1 in any coarse cell holding at least one retama pixel -- a single
+# 10 m pixel paints the whole hectare. 13_areaAudit.js section 4 measures the
+# effect directly: S1 goes 1250.8 ha (10 m) -> 5517.8 ha (100 m), factor 4.41,
+# and the 100 m figure reproduces the old value to the decimal.
+#   OLD (2026-08-07, inflated, DO NOT USE):
+#     Wi      <- c(S1 = 0.005562348528, S2 = 0.059646186136, S3 = 0.934791465336)
+#     AREA_M2 <- c(S1 = 55178037, S2 = 591685230, S3 = 9273053977)  # 991,992 ha
+#
+# Note the direction of the correction: W1 falls 4.2x but W2 *rises* 1.24x, so
+# the area one sampled S2 point stands for goes from 10.7x an S1 point to 56.5x.
+# Anything driven by S2 errors -- above all the omission of retama -- gets worse,
+# not better. S3 is still 92.5% of the ROI, so the overall accuracy remains
+# dominated by trivial far background; read OA_near, not OA.
+Wi <- c(S1 = 0.0013097215664145284,
+        S2 = 0.07403695279929151,
+        S3 = 0.9246533256342939)
 
-# Absolute stratum areas behind those weights (m^2, same GEE console print).
+# Absolute stratum areas behind those weights (m^2, same audit rows).
 # Only used to express the estimated retama area in hectares instead of "% of ROI".
-AREA_M2  <- c(S1 = 55178037, S2 = 591685230, S3 = 9273053977)
-TOTAL_HA <- sum(AREA_M2) / 1e4        # ~991,992 ha of valid land in the ROI
+AREA_M2  <- c(S1 = 12443910, S2 = 703438970, S3 = 8785304614)
+TOTAL_HA <- sum(AREA_M2) / 1e4        # ~950,119 ha of valid land in the ROI
 
 # --- REFERENCE RECONCILIATION RULES (2026-08-09) -----------------------------
 # Two rules added on top of the original "consensus or discard":
@@ -428,7 +446,7 @@ if (all(!is.na(Wi))) {
     }
     OA <- p["1","1"] + p["0","0"]
     # OA restricted to the near domain S1 u S2 (weights renormalized within it).
-    # The full-ROI OA is dominated by S3 (93.5% of the area, essentially error
+    # The full-ROI OA is dominated by S3 (92.5% of the area, essentially error
     # free), so this is the version that actually describes the part of the
     # territory where the map has to make a decision.
     Wnear   <- c("1" = Wv[["1"]], "2" = Wv[["2"]]) / (Wv[["1"]] + Wv[["2"]])

@@ -238,8 +238,8 @@ print(kable(tb, caption = "Proporción del ROI clasificada como retama por la re
 
 ```{r results='asis', eval=HAS_W}
 cat("\nDos advertencias de lectura, iguales que en el reporte de validación principal:\n\n")
-cat(sprintf("- La **OA ponderada** (%s con %s en %d) no es citable como logro: está dominada por el fondo lejano, que ocupa el 93.5%% del ROI y es trivial de clasificar. La comparación útil entre versiones son UA/PA de retama.\n",
-    olo_ci("OA", CMP_YEARS[1], BASELINE_TAG), BASE_L, CMP_YEARS[1]))
+cat(sprintf("- La **OA ponderada** (%s con %s en %d) no es citable como logro: está dominada por el fondo lejano, que ocupa el %.1f%% del ROI y es trivial de clasificar. La comparación útil entre versiones son UA/PA de retama.\n",
+    olo_ci("OA", CMP_YEARS[1], BASELINE_TAG), BASE_L, CMP_YEARS[1], 100 * Wi[["S3"]]))
 cat("- Los intervalos ponderados salen de la aproximación normal (estimación ± 1.96·SE) y **no se recortan a [0, 1]**: un estrato sin errores aporta varianza exactamente 0, así que un borde puede caer fuera del rango o quedar optimistamente angosto. Para los ceros, la lectura honesta es el intervalo de Wilson de la sección anterior.\n")
 ```
 
@@ -330,7 +330,7 @@ for (yr in CMP_YEARS) {
   (`r sum(runs[[1]]$usable$stratum == 2 & runs[[1]]$usable$year == CMP_YEARS[1])`
   puntos evaluados) y S3
   (`r sum(runs[[1]]$usable$stratum == 3 & runs[[1]]$usable$year == CMP_YEARS[1])`
-  puntos sobre el 93.5% del área). Un empeoramiento de comisión en zonas nuevas
+  puntos sobre el `r sprintf("%.1f%%", 100 * Wi[["S3"]])` del área). Un empeoramiento de comisión en zonas nuevas
   puede quedar por debajo de la resolución de esta muestra.
 - **El baseline no es el mapa publicado.** Se le quitó el gap-fill a propósito para
   aislar el efecto del entrenamiento. Las cifras de

@@ -54,19 +54,25 @@ points and same labels for every arm — a **paired** comparison), using the
 map-agnostic comparison tooling that stayed in the active pipeline:
 `../../09v_valMapLabels.js` + `../../09v_valCompare.R` / `.Rmd`.
 
-Figures below are from the reconciliation rules in force on 2026-08-09
-(`MIN_CONF = 5` low-confidence exclusion + `OR_THRESHOLD = 4` odds-ratio recovery
-of disagreeing pairs; n = 803 / 788 evaluated point-years). Re-running
-`09v_valCompare.R` after changing those knobs will shift the figures — the
-direction and the verdict did not change across the rule versions tried.
+Figures below are from the **2026-08-11** re-run: reconciliation rules
+`MIN_CONF = 5` + `OR_THRESHOLD = 2`, n = 826 / 813 evaluated point-years, and the
+**corrected stratum weights** (measured at 10 m in UTM19S — see the note at the
+end of this section). Re-running `09v_valCompare.R` after changing those knobs
+will shift the figures; the direction and the verdict have held across every rule
+version tried so far.
+
+Both arms are compared **without gap-fill**, which is the paired baseline the
+script uses (`08y_..._globalRF2_noGapFill`) — the yearly variant cannot go
+through script 07, so comparing it against the published map would confound the
+two changes.
 
 | | 2017 global → yearly | 2025 global → yearly |
 |---|---|---|
-| **Retama omission** (crude) | 11.5% → **19.0%** | 13.5% → **18.5%** |
-| Retama omission (area-weighted) | 23.4% → **29.8%** | 24.8% → **32.2%** |
-| Retama commission (crude) | 9.2% → 6.0% *(better)* | 8.1% → 9.5% |
-| Overall accuracy (unweighted) | 93.2% → 91.9% | 94.0% → 92.4% |
-| McNemar (paired) | p = 0.155 | **p = 0.016** |
+| **Retama omission** (crude) | 12.8% → **20.6%** | 16.0% → **20.7%** |
+| **Retama omission** (area-weighted) | 54.0% → **58.1%** | 46.7% → **58.7%** |
+| Retama commission (crude) | 10.2% → 7.4% *(better)* | 9.5% → 10.9% |
+| Overall accuracy (unweighted) | 92.3% → 90.8% | 92.7% → 91.1% |
+| McNemar (paired) | p = 0.097 | **p = 0.016** |
 
 Two reasons it was rejected:
 
@@ -76,13 +82,28 @@ Two reasons it was rejected:
    remove 12 false positives. Omission was already the map's weakest metric.
    2025 is the same story: 16 removals in S1, only 2 correct.
 2. **It breaks the zero far-background commission property.** In 2025 the yearly
-   map puts one false positive in 105 far-background (S3) points; the global
-   model has 0 in 420 point-years. Because S3 carries 93.5% of the ROI area,
-   that single point drives the area-weighted retama commission to 75.2%
-   [40.4, 110]. Numerically that rests on **one** sampled point and the interval
-   is enormous — but structurally it is the more serious of the two findings,
-   since the far-commission-is-zero property is what the whole stratified design
-   leans on.
+   map puts a false positive in the far-background (S3) stratum; the published
+   global map has none in 420 point-years. Because S3 carries 92.5% of the ROI
+   area, that single point drives the area-weighted retama commission to **91.2%
+   [75.4, 107]**. Numerically that rests on **one** sampled point and the
+   interval is enormous — but structurally it is the more serious of the two
+   findings, since the far-commission-is-zero property is what the whole
+   stratified design leans on.
+
+> **Weights corrected 2026-08-11.** Every area-weighted figure on this page was
+> recomputed after the stratum areas were found to be measured at 100 m over a
+> presence-only raster, which inflated S1 by 4.4× (see `../../13_areaAudit.js`
+> and `docs/area_discrepancy_note.md`). The correction raised the weight of S2
+> relative to S1 by ~5×, so *all* weighted omission figures — for the published
+> map as much as for this variant — are substantially higher than previously
+> reported. **The verdict is unaffected**: it rests on crude omission, the
+> McNemar test and the flow table, none of which use the weights.
+>
+> One thing the re-run did surface: the *global* map without gap-fill also
+> carries a heavy-stratum false positive in 2025 (weighted commission 20.3%,
+> against 9.1% for the published map). That is a point in favour of the
+> gap-fill, not of the yearly variant, and it is worth a closer look if the
+> gap-fill question is reopened.
 
 ### Why this was, in hindsight, predictable
 
@@ -96,10 +117,16 @@ the regularization mechanism of the method.
 
 ### Side finding worth keeping
 
-`canon` (with gap-fill) vs `globalNoGF` barely differ at the validation points
-(2017: 751 vs 748 correct; 2025: 742 vs 741). **Gap-fill contributes very little**
-at sampled locations — which both validated the matched baseline and is a lead
-worth following up on its own.
+`canon` (with gap-fill) vs `globalNoGF` barely differ **in how many points they
+get right** (2017: 765 vs 762 of 826; 2025: 755 vs 754 of 813). Counting hits,
+gap-fill looks like it contributes almost nothing.
+
+Weighting by area tells a different story: in 2025 the no-gap-fill map carries a
+false positive in a heavy stratum, so its weighted retama commission is 20.3%
+against 9.1% for the published map. **A change that moves one point can move a
+weighted metric by ten points** — which is the whole reason the design is
+stratified, and a reminder not to judge a map version by its hit count. Worth
+following up on its own.
 
 ## Caveats on the verdict
 
