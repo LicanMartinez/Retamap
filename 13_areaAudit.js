@@ -472,10 +472,14 @@ var oneKm = function(year) {
   // very failure mode this section is meant to expose.
   var frac = m.reduceResolution({reducer: ee.Reducer.mean(), maxPixels: 65535})
     .reproject({crs: UTM19S, scale: 1000});
-  var haCorrect = ee.Number(frac.multiply(ee.Image.pixelArea()).reduceRegion({
-    reducer: ee.Reducer.sum(), geometry: roiGeom, crs: UTM19S, scale: 1000,
-    maxPixels: 1e13, tileScale: TILE_SCALE
-  }).get('area')).divide(1e4);
+  // rename('area') is load-bearing: multiply() inherits the band names of its
+  // FIRST operand, so without it the band stays 'classification' (from
+  // finalMap) and the .get('area') below fails.
+  var haCorrect = ee.Number(frac.multiply(ee.Image.pixelArea()).rename('area')
+    .reduceRegion({
+      reducer: ee.Reducer.sum(), geometry: roiGeom, crs: UTM19S, scale: 1000,
+      maxPixels: 1e13, tileScale: TILE_SCALE
+    }).get('area')).divide(1e4);
 
   // Naive route: reproject straight to 1 km with no reduceResolution, so EE
   // resamples from the pyramid. This is the classic way to lose (or invent) a
