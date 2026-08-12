@@ -77,8 +77,8 @@ var DRIVE_FOLDER    = 'Retamap/Retamap_GEE_Exports';
 //
 // One task PER SECTION, so a section that blows up does not take the others with
 // it, and you can re-run just that one with a bigger TILE_SCALE.
-var EXPORT_TO_DRIVE = false;
-var RUN_PRINTS      = true;
+var EXPORT_TO_DRIVE = true;
+var RUN_PRINTS      = false;
 
 // Raise this if a task fails with "User memory limit exceeded": it splits each
 // reduction into more, smaller pieces (slower, much less memory). 16 is already
