@@ -52,7 +52,7 @@ matched `globalRF2_noGapFill` baseline. The real A/B is
 Measured with the independent 09v reference (1130 human labels, 919 points, same
 points and same labels for every arm — a **paired** comparison), using the
 map-agnostic comparison tooling that stayed in the active pipeline:
-`../../09v_valMapLabels.js` + `../../09v_valCompare.R` / `.Rmd`.
+`../../validation/09v_valMapLabels.js` + `../../validation/09v_valCompare.R` / `.Rmd`.
 
 Figures below are from the **2026-08-11** re-run: reconciliation rules
 `MIN_CONF = 5` + `OR_THRESHOLD = 2`, n = 826 / 813 evaluated point-years, and the
@@ -92,7 +92,7 @@ Two reasons it was rejected:
 
 > **Weights corrected 2026-08-11.** Every area-weighted figure on this page was
 > recomputed after the stratum areas were found to be measured at 100 m over a
-> presence-only raster, which inflated S1 by 4.4× (see `../../13_areaAudit.js`
+> presence-only raster, which inflated S1 by 4.4× (see `../../tools/13_areaAudit.js`
 > and `docs/area_discrepancy_note.md`). The correction raised the weight of S2
 > relative to S1 by ~5×, so *all* weighted omission figures — for the published
 > map as much as for this variant — are substantially higher than previously
@@ -153,8 +153,8 @@ intermediate ones:
 
 And first: finish loading the validation, since S1 is where the signal is.
 
-To measure any of them, add an entry to `MAPS` in `../../09v_valMapLabels.js` and
-one to `CMP_VARIANTS` in `../../09v_valCompare.R`; the comparison report
+To measure any of them, add an entry to `MAPS` in `../../validation/09v_valMapLabels.js` and
+one to `CMP_VARIANTS` in `../../validation/09v_valCompare.R`; the comparison report
 re-renders with no text changes.
 
 ## Running these scripts again

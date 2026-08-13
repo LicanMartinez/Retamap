@@ -15,7 +15,7 @@ output:
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
                       fig.align = "center")
 source(file.path("D:/Lican/uni/Investigacion/Colaboraciones_y_ayudas/Retamap",
-                 "gee_scripts", "09v_valAnalysis_compute.R"))
+                 "gee_scripts", "validation", "09v_valAnalysis_compute.R"))
 library(knitr)
 pct  <- function(x) ifelse(is.na(x), "\u2014", sprintf("%.1f%%", 100 * as.numeric(x)))
 num3 <- function(x) ifelse(is.na(x), "\u2014", formatC(as.numeric(x), format = "f", digits = 3))
@@ -431,4 +431,4 @@ intervalo más ancho del reporte— S2 está **sub**-muestreado, no sobre-muestr
 ---
 
 <small>Versión condensada de `09v_valAnalysis.Rmd`. Motor de cálculo:
-`09v_valAnalysis_compute.R`; tablas y figuras en `validation/analysis/`.</small>
+`09v_valAnalysis_compute.R`; tablas y figuras en `validation_data/analysis/`.</small>

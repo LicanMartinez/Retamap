@@ -1,6 +1,7 @@
 // =============================================================================
 // 06: RF2 — Load classifier asset → raw per-year predictions
 // -----------------------------------------------------------------------------
+// Role         : MAP PRODUCTION, step 6 of 8. Manuscript section 2.2.4.
 // Prerequisite : asset 05_RF2_classifier{SUFFIX}  (from 05_RF2train.js)
 //              + assets 01_MergedBands_YYYY        (from 01_sentinelMosaic.js)
 // Produces     : assets 06_RF2_raw_prediction_YYYY{SUFFIX}  (uint8, no patch filter)

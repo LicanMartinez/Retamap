@@ -1,7 +1,11 @@
 // =============================================================================
-// 11: Predictions Visualizer — RF2 final, all years
+// 11.2: Predictions Visualizer — final map, full time series in one colour ramp
 // -----------------------------------------------------------------------------
+// Role         : TOOL — visualization only. Creates no asset, exports nothing.
 // Prerequisite : assets 08_RF2_prediction_YYYY{SUFFIX} (from 08_RF2patchFilter.js)
+// -----------------------------------------------------------------------------
+// Years are drawn newest-first so the older ones sit on top: useful to see where
+// the invasion gained and lost ground across the series.
 // =============================================================================
 
 // =============================================================================

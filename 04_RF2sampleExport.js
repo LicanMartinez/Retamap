@@ -178,9 +178,23 @@ var compBackgroundPolys =
             })]);
 /***** End of imports. If edited, may not auto-convert in the playground. *****/
 // =============================================================================
-// 04: RF2 — Stratified sampling from stable regions + Complementary samples
-//          + Train/Val split
-// =============================================================================
+// 04: RF2 — Stratified sampling of the stable regions + train/val split
+// -----------------------------------------------------------------------------
+// Role         : MAP PRODUCTION, step 4 of 8. Manuscript section 2.2.4.
+// Prerequisite : asset 03_RF2_stable_categories_rf1compCtrl (from 03)
+//              + assets 01_MergedBands_YYYY                 (from 01)
+// Produces     : assets 04_RF2_samples_YYYY{SUFFIX}_train  (9)
+//              + assets 04_RF2_samples_YYYY{SUFFIX}_val    (9)
+//              + asset  04_compBackgroundPolys  (section 6) — the hand-drawn
+//                complementary control polygons, which are an INPUT of 02.
+//                See the numbering note in the header of 02_RF1fit.js.
+// -----------------------------------------------------------------------------
+// The _val partition is held out but is NOT used to assess accuracy: the
+// holdout was retired and accuracy is estimated independently (validation/).
+// -----------------------------------------------------------------------------
+// The block above section 0 is hand-digitised geometry, not code: it is the
+// definition of 04_compBackgroundPolys as drawn in the Code Editor.
+// -----------------------------------------------------------------------------
 // Strategy:
 //   1. bounds() on region: eliminates point-in-polygon over 14k vertices
 //   2. Two-step: stratifiedSample over a single static-band image (once),

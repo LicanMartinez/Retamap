@@ -1,6 +1,7 @@
 // =============================================================================
 // 08: RF2 — Patch filter on gap-filled predictions → final RF2 assets
 // -----------------------------------------------------------------------------
+// Role         : MAP PRODUCTION, step 8 of 8 (final map). Section 2.2.5.
 // Prerequisite : assets 07_RF2_gapFill_YYYY{SUFFIX}  (from 07_RF2gapFill.js)
 // Produces     : assets 08_RF2_prediction_YYYY{SUFFIX}  (uint8, patch-filtered)
 // -----------------------------------------------------------------------------

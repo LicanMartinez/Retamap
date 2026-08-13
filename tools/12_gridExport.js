@@ -1,6 +1,12 @@
 // =============================================================================
 // =============================================================================
 // 12: Generate and export a regular grid over the study area
+// -----------------------------------------------------------------------------
+// Role         : TOOL — not part of the map pipeline. The 1000 m grid is the
+//                spatial unit of the downstream R analysis (manuscript sections
+//                2.3 and 2.4) and is also read by 13_areaAudit.js section 7.
+// Prerequisite : asset 3_study_area_retama
+// Produces     : asset 12_grid_{CELL_SIZE}m[_clipped]
 // =============================================================================
 // -----------------------------------------------------------------------------
 // Produces a vector grid (FeatureCollection) covering the bounding box of

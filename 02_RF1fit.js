@@ -1,6 +1,26 @@
 // =============================================================================
-// 02: RF1 training, prediction, and export to asset
-// Runs after 01_sentinelMosaic.js assets are exported
+// 02: RF1 — first-stage classifier trained on the photo-interpreted polygons
+// -----------------------------------------------------------------------------
+// Role         : MAP PRODUCTION, step 2 of 8. Manuscript section 2.2.2.
+// Prerequisite : assets 01_MergedBands_YYYY  (from 01_sentinelMosaic.js)
+//              + asset gt_polys_6_ctrlReduce_moreCtrls_refineRetamas (uploaded)
+//              + asset 04_compBackgroundPolys  (see the note below)
+// Produces     : assets 02_RF1_2compCTRL_prediction_connectedFilter_YYYY
+//                (with the default toggles; band `pred`, uint8)
+// -----------------------------------------------------------------------------
+// NOTE ON THE NUMBERING. This script consumes an asset whose name starts with
+// 04 because the pipeline has one deliberate feedback loop: inspecting the
+// stable samples of step 03 revealed background units that RF1 kept calling
+// C. scoparius, so complementary control polygons were drawn over them and fed
+// back into RF1 (this is the refinement described at the end of section 2.2.2).
+// Those polygons are exported by 04_RF2sampleExport.js section 6, but logically
+// they are an input of this step. Run order on a cold start: run 04 section 6
+// once to create 04_compBackgroundPolys, or set INCLUDE_COMP_POLYS = false to
+// reproduce the unrefined RF1.
+//
+// Toggles: INCLUDE_COMP_POLYS = true and APPLY_PIXEL_FILTER = true give the
+// classifier used in the manuscript. Setting both to false produces the
+// unrefined, unfiltered assets 02_RF1_raw_prediction_YYYY instead.
 // =============================================================================
 
 // =============================================================================

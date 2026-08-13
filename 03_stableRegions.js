@@ -1,7 +1,15 @@
 // =============================================================================
-// 03: Stable & quasi-stable regions from RF1 prediction assets
-// Prerequisite : assets 02_RF1_raw_prediction_YYYY  (from 02_RF1fit.js)
-// Produces     : asset 03_RF2_stable_categories
+// 03: Temporally stable & quasi-stable regions from the RF1 series
+// -----------------------------------------------------------------------------
+// Role         : MAP PRODUCTION, step 3 of 8. Manuscript section 2.2.3.
+// Prerequisite : assets 02_RF1_2compCTRL_prediction_connectedFilter_YYYY
+//                (from 02_RF1fit.js)
+// Produces     : asset 03_RF2_stable_categories_rf1compCtrl
+//                band `stable_class`: 1 = stable C. scoparius   (9 of 9 years)
+//                                     2 = quasi-stable retama   (8 of 9)
+//                                     3 = stable background     (0 of 9)
+//                                     4 = quasi-stable bg       (1 of 9)
+//                every other pixel is masked out as ambiguous.
 // =============================================================================
 
 // =============================================================================

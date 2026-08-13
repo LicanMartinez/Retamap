@@ -1,6 +1,7 @@
 // =============================================================================
 // 07: RF2 — Temporal gap-fill of raw predictions
 // -----------------------------------------------------------------------------
+// Role         : MAP PRODUCTION, step 7 of 8. Manuscript section 2.2.5.
 // Prerequisite : assets 06_RF2_raw_prediction_YYYY{SUFFIX}  (from 06_RF2predict.js)
 // Produces     : assets 07_RF2_gapFill_YYYY{SUFFIX}  (uint8)
 // -----------------------------------------------------------------------------

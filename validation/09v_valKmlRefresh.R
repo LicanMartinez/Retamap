@@ -15,7 +15,7 @@
 # =============================================================================
 
 PROJECT_DIR <- "D:/Lican/uni/Investigacion/Colaboraciones_y_ayudas/Retamap"
-WORK_DIR    <- file.path(PROJECT_DIR, "gee_scripts", "validation")
+WORK_DIR    <- file.path(PROJECT_DIR, "gee_scripts", "validation_data")
 RUN_SUFFIX  <- "_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k"
 
 MASTER_KEY_CSV <- file.path(WORK_DIR, "09v_master_key.csv")

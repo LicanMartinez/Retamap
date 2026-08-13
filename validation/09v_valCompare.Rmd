@@ -19,7 +19,7 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
 # prose is typed by hand, so this file can be re-rendered as-is when new arms
 # (e.g. the 9-year yearly run WITH gap-fill) are added to CMP_VARIANTS.
 source(file.path("D:/Lican/uni/Investigacion/Colaboraciones_y_ayudas/Retamap",
-                 "gee_scripts", "09v_valCompare.R"))
+                 "gee_scripts", "validation", "09v_valCompare.R"))
 library(knitr)
 
 pct   <- function(x) ifelse(is.na(x), "\u2014", sprintf("%.1f%%", 100 * as.numeric(x)))
@@ -352,4 +352,4 @@ for (yr in CMP_YEARS) {
 
 *Generado por `09v_valCompare.Rmd` sobre `09v_valCompare.R` + `09v_valAnalysis_compute.R`.
 Cada versión escribe además su juego completo de tablas y figuras en
-`validation/analysis/<tag>/`.*
+`validation_data/analysis/<tag>/`.*

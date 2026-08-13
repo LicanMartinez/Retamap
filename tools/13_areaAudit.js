@@ -2,6 +2,15 @@
 // =============================================================================
 // 13: AREA AUDIT — diagnostic only (no assets created, no sampling, no exports
 //     that touch the pipeline)
+// -----------------------------------------------------------------------------
+// Role         : TOOL / DIAGNOSTIC. Every hectare figure in the project comes
+//                from here, and section 5 is the source of the Wi stratum
+//                weights hard-coded in validation/09v_valAnalysis_compute.R.
+// Prerequisite : assets 08_RF2_prediction_YYYY{SUFFIX} + 01_MergedBands_YYYY
+//                (+ 12_grid_1000m_clipped for section 7)
+// Produces     : console output, plus one CSV per section to Drive when
+//                EXPORT_TO_DRIVE = true (which is how it has to be run: the
+//                10 m reductions blow past the interactive limits).
 // =============================================================================
 // =============================================================================
 //

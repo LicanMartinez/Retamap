@@ -5,12 +5,12 @@
 # human reference labels, by running 09v_valAnalysis_compute.R once per version.
 #
 # Consumes:
-#   - validation/09v_valMapLabels.csv   (from 09v_valMapLabels.js, via Drive)
+#   - validation_data/09v_valMapLabels.csv   (from 09v_valMapLabels.js, via Drive)
 #         pxid + one column m<year>_<tag> per map version
-#   - validation/09v_master_key.csv     (strata, validators, frozen map labels)
-#   - validation/sheets_filled/<val>_filled.csv   (reference labels)
+#   - validation_data/09v_master_key.csv     (strata, validators, frozen map labels)
+#   - validation_data/sheets_filled/<val>_filled.csv   (reference labels)
 #
-# Produces (in validation/analysis/):
+# Produces (in validation_data/analysis/):
 #   - one subfolder per variant (<tag>/) with that variant's full CSV/figure set
 #   - 09v_cmp_metrics_crude.csv       side-by-side crude metrics + Wilson CIs
 #   - 09v_cmp_metrics_olofsson.csv    side-by-side area-weighted metrics
@@ -37,9 +37,9 @@ suppressPackageStartupMessages(library(ggplot2))
 # ---- 0. CONFIG --------------------------------------------------------------
 PROJECT_DIR <- "D:/Lican/uni/Investigacion/Colaboraciones_y_ayudas/Retamap"
 GEE_DIR     <- file.path(PROJECT_DIR, "gee_scripts")
-WORK_DIR    <- file.path(GEE_DIR, "validation")
+WORK_DIR    <- file.path(GEE_DIR, "validation_data")
 OUT_DIR     <- file.path(WORK_DIR, "analysis")
-COMPUTE_R   <- file.path(GEE_DIR, "09v_valAnalysis_compute.R")
+COMPUTE_R   <- file.path(GEE_DIR, "validation", "09v_valAnalysis_compute.R")
 MASTER_KEY  <- file.path(WORK_DIR, "09v_master_key.csv")
 # Allow a caller (or a smoke test) to point at a different labels file.
 if (!exists("LABELS_CSV", inherits = FALSE)) {
@@ -83,7 +83,7 @@ dir.create(OUT_DIR, showWarnings = FALSE, recursive = TRUE)
 if (!file.exists(LABELS_CSV)) {
   stop("Missing ", LABELS_CSV, "\n",
        "Run 09v_valMapLabels.js in the GEE Code Editor and download the CSV ",
-       "from Drive (", "Retamap/Retamap_GEE_Exports", ") into validation/.")
+       "from Drive (", "Retamap/Retamap_GEE_Exports", ") into validation_data/.")
 }
 lab <- read.csv(LABELS_CSV, stringsAsFactors = FALSE, colClasses = "character")
 stopifnot("pxid" %in% names(lab), !anyDuplicated(lab$pxid))

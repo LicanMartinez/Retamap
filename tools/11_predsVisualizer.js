@@ -4,10 +4,19 @@ var trueColorVisParam = {"opacity":1,"bands":["B4","B3","B2"],"min":365.91480931
 // =============================================================================
 // 11: Predictions Visualizer — RF1 / RF2 raw / RF2 gap-fill / RF2 final, all years
 // -----------------------------------------------------------------------------
-// Prerequisite : assets 02_RF1_raw_prediction_YYYY        (from 02_RF1fit.js)
+// Role         : TOOL — visualization only. Creates no asset, exports nothing.
+// -----------------------------------------------------------------------------
+// Prerequisite : assets 02_RF1_2compCTRL_prediction_connectedFilter_YYYY (from 02)
 //              + assets 06_RF2_raw_prediction_YYYY{SUFFIX} (from 06_RF2predict.js)
 //              + assets 07_RF2_gapFill_YYYY{SUFFIX}        (from 07_RF2gapFill.js)
 //              + assets 08_RF2_prediction_YYYY{SUFFIX}     (from 08_RF2patchFilter.js)
+//
+// Optional layers, OFF by default because their assets only exist if you ran the
+// non-default configurations that produce them:
+//   SHOW_RF1_RAW      → 02_RF1_raw_prediction_YYYY  (02 with INCLUDE_COMP_POLYS
+//                       = false and APPLY_PIXEL_FILTER = false)
+//   SHOW_MULTIRUN_CMP → 06_ assets of OTHER RUN_SUFFIX values
+//   SHOW_PERYEAR_CMP  → 05b_ assets from experimental/, which is not published
 // -----------------------------------------------------------------------------
 // Displays only class-1 pixels (selfMask) for each model and year:
 //   RF1          → yellow     (#FFD700)
@@ -31,6 +40,9 @@ var roi           = ee.FeatureCollection(ASSET_PREFIX + '3_study_area_retama');
 // Set to true only after running the corresponding script
 var SHOW_RF2_GAPFILL = true;   // toggle after 07_RF2gapFill.js
 var SHOW_RF2_FINAL   = true;   // toggle after 08_RF2patchFilter.js
+var SHOW_RF1_RAW     = false;  // needs 02_RF1_raw_prediction_YYYY (non-default 02 config)
+var SHOW_MULTIRUN_CMP= false;  // section 3: needs 06_ assets of other RUN_SUFFIX values
+var SHOW_PERYEAR_CMP = false;  // section 4: needs 05b_ assets from experimental/ (unpublished)
 
 // Visualization params — only class-1 shown (selfMask removes class-0)
 var visRF1     = {min: 1, max: 1, palette: ['#FFD700']};  // yellow
@@ -60,9 +72,12 @@ years.forEach(function(year) {
   Map.addLayer(mosaic, visTrueColor, 'True color ' + year, false);
   Map.addLayer(mosaic.select('NDYI'), visNDYI, 'NDYI ' + year, false);
 
-  // RF1 band is 'pred' (from 02_RF1fit.js)
-  var rf1 = ee.Image(ASSET_PREFIX + '02_RF1_raw_prediction_' + year)
-    .select('pred').selfMask().clip(roi);
+  // RF1 without complementary controls / without patch filter — optional, see header
+  if (SHOW_RF1_RAW) {
+    var rf1 = ee.Image(ASSET_PREFIX + '02_RF1_raw_prediction_' + year)
+      .select('pred').selfMask().clip(roi);
+    Map.addLayer(rf1, visRF1, 'RF1 raw ' + year, false);
+  }
 
   var rf1_compCtrl = ee.Image(ASSET_PREFIX + '02_RF1_2compCTRL_prediction_connectedFilter_' + year)
     .select('pred').selfMask().clip(roi);
@@ -79,7 +94,6 @@ years.forEach(function(year) {
   var rf2fin = ee.Image(ASSET_PREFIX + '08_RF2_prediction_' + year + RUN_SUFFIX)
     .select('classification').selfMask().clip(roi);
 
-  Map.addLayer(rf1,    visRF1,    'RF1 '         + year, false);
   Map.addLayer(rf1_compCtrl,    visRF1_compCtrl,    'RF1_compCtrl '         + year, false);
   Map.addLayer(rf2raw, visRF2raw, 'RF2 raw '     + year, false);
   if (SHOW_RF2_GAPFILL) {
@@ -102,8 +116,9 @@ years.forEach(function(year) {
 
 // var COMPARE_YEARS    = [2017, 2018];
 var COMPARE_YEARS    = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
+// Only the canonical run is listed: the assets of superseded runs were deleted.
+// Add a suffix here only if its 06_ assets still exist in your asset folder.
 var COMPARE_SUFFIXES = [
-  '_trimmedRF1comp_s1n12k_qs1n12k_s0n12k_qs0n12k',
   '_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k'
 ];
 
@@ -116,6 +131,7 @@ var COMPARE_PALETTES = [
   '#FF4500',   // orange-red (run 5)
 ];
 
+if (SHOW_MULTIRUN_CMP) {
 COMPARE_YEARS.forEach(function(year) {
   // RF1 — shown once per year regardless of suffix list
   // var rf1 = ee.Image(ASSET_PREFIX + '02_RF1_prediction_connectedFilter_' + year)
@@ -143,14 +159,14 @@ COMPARE_YEARS.forEach(function(year) {
     );
   });
 });
+}
 
 // =============================================================================
 // 4. BASELINE vs PER-YEAR RF2 COMPARISON
 // -----------------------------------------------------------------------------
 // Compares the single-model RF2 raw predictions (06_) against year-specific
-// RF2 models (05b_). Toggle SHOW_PERYEAR_CMP after running 05b_RF2trainPerYear.js.
+// RF2 models (05b_), which live in the unpublished experimental/ folder.
 // =============================================================================
-var SHOW_PERYEAR_CMP = true;
 
 if (SHOW_PERYEAR_CMP) {
   var visBaseline = {min: 1, max: 1, palette: ['#FF8C00']};  // orange

@@ -1,7 +1,17 @@
 // =============================================================================
-// =============================================================================
-// 01: generate and export sentinel mosaic
-// =============================================================================
+// 01: Annual Sentinel-2 mosaics (Nov-Dec flowering + following Feb)
+// -----------------------------------------------------------------------------
+// Role         : MAP PRODUCTION, step 1 of 8. Manuscript section 2.2.1.
+// Prerequisite : asset 3_study_area_retama (study-area polygon, uploaded)
+// Produces     : assets 01_MergedBands_YYYY  (2017-2025)
+//                11 bands: B2 B3 B4 B8 NDYI year B2_feb B3_feb B4_feb B8_feb
+//                NDYI_feb. The 10 spectral/index bands are the model features;
+//                `year` is inert (uint8 saturates at 255) and is never used.
+// -----------------------------------------------------------------------------
+// COPERNICUS/S2_HARMONIZED is the Level-1C (top-of-atmosphere) collection.
+// Exports use scale:10 WITHOUT crs, so the assets land in EPSG:4326, where the
+// pixel measures ~75.1 m2 rather than 100 m2 — see tools/13_areaAudit.js before
+// converting any pixel count into hectares.
 // =============================================================================
 
 

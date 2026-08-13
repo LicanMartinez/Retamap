@@ -3,10 +3,10 @@
 # -----------------------------------------------------------------------------
 # Compute engine for the independent-validation report (family 09v_).
 # Consumes:
-#   - validation/09v_master_key.csv                      (map labels + stratum +
+#   - validation_data/09v_master_key.csv                      (map labels + stratum +
 #                                                        authoritative validators)
-#   - validation/sheets_filled/<val>_filled.csv          (reference labels)
-# Produces (in validation/analysis/):
+#   - validation_data/sheets_filled/<val>_filled.csv          (reference labels)
+# Produces (in validation_data/analysis/):
 #   - 09v_confusion_<year>.csv       overall 2x2 confusion (map vs reference)
 #   - 09v_perStratum_<year>.csv      per-stratum (S1/S2/S3) confusion cells
 #   - 09v_metrics_unweighted.csv     OA / commission / omission (sample-based)
@@ -40,7 +40,7 @@ suppressPackageStartupMessages(library(ggplot2))
 
 # ---- 0. CONFIG --------------------------------------------------------------
 PROJECT_DIR <- "D:/Lican/uni/Investigacion/Colaboraciones_y_ayudas/Retamap"
-WORK_DIR    <- file.path(PROJECT_DIR, "gee_scripts", "validation")
+WORK_DIR    <- file.path(PROJECT_DIR, "gee_scripts", "validation_data")
 SHEETS_DIR  <- file.path(WORK_DIR, "sheets_filled")
 MASTER_KEY  <- file.path(WORK_DIR, "09v_master_key.csv")
 YEARS       <- c(2017, 2025)

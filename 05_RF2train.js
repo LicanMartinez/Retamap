@@ -1,6 +1,7 @@
 // =============================================================================
 // 05: RF2 — Train classifier from per-year _train sample assets → export classifier
 // -----------------------------------------------------------------------------
+// Role         : MAP PRODUCTION, step 5 of 8. Manuscript section 2.2.4.
 // Prerequisite : assets 04_RF2_samples_YYYY{SUFFIX}_train  (from 04_RF2sampleExport.js)
 // Produces     : asset 05_RF2_classifier{SUFFIX}
 // -----------------------------------------------------------------------------

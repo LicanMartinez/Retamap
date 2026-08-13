@@ -4,8 +4,8 @@
 # Turns the validator Google Sheets, pasted verbatim into text files, into the
 # canonical `<validator>_filled.csv` that 09v_valAnalysis_compute.R consumes.
 #
-#   validation/sheets_filled/<val>_pasted.txt   (in:  tab-separated paste)
-#   validation/sheets_filled/<val>_filled.csv   (out: validator,pxid,
+#   validation_data/sheets_filled/<val>_pasted.txt   (in:  tab-separated paste)
+#   validation_data/sheets_filled/<val>_filled.csv   (out: validator,pxid,
 #                                                class_2017,conf_2017,
 #                                                class_2025,conf_2025)
 #
@@ -25,11 +25,11 @@
 #     identical, hard error when they disagree
 #   - rows not yet labelled: kept out of the output (the engine drops them too)
 #
-# Run:  Rscript gee_scripts/09v_valSheetsIngest.R
+# Run:  Rscript gee_scripts/validation/09v_valSheetsIngest.R
 # =============================================================================
 
 PROJECT_DIR <- "D:/Lican/uni/Investigacion/Colaboraciones_y_ayudas/Retamap"
-WORK_DIR    <- file.path(PROJECT_DIR, "gee_scripts", "validation")
+WORK_DIR    <- file.path(PROJECT_DIR, "gee_scripts", "validation_data")
 SHEETS_DIR  <- file.path(WORK_DIR, "sheets_filled")
 MASTER_KEY  <- file.path(WORK_DIR, "09v_master_key.csv")
 VALIDATORS  <- c("lican", "sofi", "jaime")
