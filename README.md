@@ -17,10 +17,6 @@ samples** derived from the multi-year RF1 series.
 > the `_HARMONIZED` collection already shifts post-baseline scenes back onto the
 > pre-baseline scale.
 
-## Citation
-
-...
-
 ## Where each part of the paper lives
 
 | Manuscript section | Code |
@@ -203,18 +199,14 @@ Reproducing the classification requires the reference asset
 polygons), the study-area polygon `3_study_area_retama`, and a GEE account with
 access to the `Retamap` asset folder.
 
-The R scripts currently carry an absolute `PROJECT_DIR` in their config section
-and read from `validation_data/`, which is not distributed. They are published as
-a record of how the reported numbers were computed rather than as a turnkey
-pipeline; adapt `PROJECT_DIR` and supply the reference labels to re-run them.
+The R scripts read their inputs from `validation_data/`, which is not distributed.
+They resolve it relative to `PROJECT_DIR`, which defaults to the directory they are
+invoked from — i.e. run them from the folder that contains `gee_scripts/`, or point
+the `RETAMAP_DIR` environment variable at it:
 
-## Data & assets
+```
+Rscript gee_scripts/validation/09v_valAnalysis_compute.R
+```
 
-All pipeline assets live under `projects/ee-licanemartinez/assets/Retamap/`, with
-the numeric prefix of each asset matching the script that creates it. The
-independent validation point set is served as the blind asset
-`09v_valPoints_fc` (point IDs only).
-
-## License
-
-`[to be added]`
+They are published as a record of how the reported numbers were computed rather than
+as a turnkey pipeline: re-running them also requires the reference labels.

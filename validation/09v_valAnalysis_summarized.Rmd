@@ -14,8 +14,10 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
                       fig.align = "center")
-source(file.path("D:/Lican/uni/Investigacion/Colaboraciones_y_ayudas/Retamap",
-                 "gee_scripts", "validation", "09v_valAnalysis_compute.R"))
+# The engine sits next to this file; knitr sets the working directory to the
+# Rmd's folder, and the engine resolves validation_data/ from RETAMAP_DIR.
+if (!nzchar(Sys.getenv("RETAMAP_DIR"))) Sys.setenv(RETAMAP_DIR = normalizePath("../.."))
+source("09v_valAnalysis_compute.R")
 library(knitr)
 pct  <- function(x) ifelse(is.na(x), "\u2014", sprintf("%.1f%%", 100 * as.numeric(x)))
 num3 <- function(x) ifelse(is.na(x), "\u2014", formatC(as.numeric(x), format = "f", digits = 3))

@@ -40,12 +40,13 @@ var ASSIGN = require('users/licanemartinez/Retamap:validation/09v_valAssign.js')
 var VALIDATORS = ['lican', 'sofi', 'jaime'];
 var VAL_YEARS  = ['2017', '2025'];
 
-// Fill these in AFTER creating the three Google Sheets (one per validator).
-// Leave '' and the app just shows a hint instead of a working link.
+// One private response spreadsheet per validator (working data of the team, kept
+// out of this repository). Paste the URLs here in your own copy of the script;
+// left empty, the app shows a hint in place of the link and everything else works.
 var SHEET_URLS = {
-  lican: 'https://docs.google.com/spreadsheets/d/1wm9Ie9bp0FGXwN54wPTyRSGPYqUC2tMmiZD78msWzBA/edit?usp=sharing',
-  sofi:  'https://docs.google.com/spreadsheets/d/1kVk5R2ZJfVYEGUx9JLCX_FG7v_PaGhSQtY6rCxBCigA/edit?usp=sharing',
-  jaime: 'https://docs.google.com/spreadsheets/d/1fD79Y1mDHW8kDuvrp4l4aAz2BkfmeYy0q1I0nl6bM9Q/edit?usp=sharing'
+  lican: '',
+  sofi:  '',
+  jaime: ''
 };
 
 // Shared visualization params (identical to 09v_valInspector_TEMPLATE.js).

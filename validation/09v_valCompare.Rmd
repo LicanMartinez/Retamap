@@ -18,8 +18,10 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE,
 # comparison. Everything below is derived from those objects — no number in the
 # prose is typed by hand, so this file can be re-rendered as-is when new arms
 # (e.g. the 9-year yearly run WITH gap-fill) are added to CMP_VARIANTS.
-source(file.path("D:/Lican/uni/Investigacion/Colaboraciones_y_ayudas/Retamap",
-                 "gee_scripts", "validation", "09v_valCompare.R"))
+# The engine sits next to this file; knitr sets the working directory to the
+# Rmd's folder, and the engine resolves validation_data/ from RETAMAP_DIR.
+if (!nzchar(Sys.getenv("RETAMAP_DIR"))) Sys.setenv(RETAMAP_DIR = normalizePath("../.."))
+source("09v_valCompare.R")
 library(knitr)
 
 pct   <- function(x) ifelse(is.na(x), "\u2014", sprintf("%.1f%%", 100 * as.numeric(x)))

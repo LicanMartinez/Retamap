@@ -28,7 +28,9 @@
 # Run:  Rscript gee_scripts/validation/09v_valSheetsIngest.R
 # =============================================================================
 
-PROJECT_DIR <- "D:/Lican/uni/Investigacion/Colaboraciones_y_ayudas/Retamap"
+# Folder that CONTAINS gee_scripts/. Defaults to the directory the script is
+# invoked from (the project root); override with the RETAMAP_DIR env variable.
+PROJECT_DIR <- Sys.getenv("RETAMAP_DIR", unset = ".")
 WORK_DIR    <- file.path(PROJECT_DIR, "gee_scripts", "validation_data")
 SHEETS_DIR  <- file.path(WORK_DIR, "sheets_filled")
 MASTER_KEY  <- file.path(WORK_DIR, "09v_master_key.csv")

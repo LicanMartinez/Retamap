@@ -43,7 +43,9 @@ suppressPackageStartupMessages(library(sf))
 # =============================================================================
 RUN_SUFFIX <- "_trimmedRF1comp_s1n10k_qs1n10k_s0n15k_qs0n15k"
 
-PROJECT_DIR <- "D:/Lican/uni/Investigacion/Colaboraciones_y_ayudas/Retamap"
+# Folder that CONTAINS gee_scripts/. Defaults to the directory the script is
+# invoked from (the project root); override with the RETAMAP_DIR env variable.
+PROJECT_DIR <- Sys.getenv("RETAMAP_DIR", unset = ".")
 WORK_DIR    <- file.path(PROJECT_DIR, "gee_scripts", "validation_data")
 
 # Place the Drive-downloaded raw CSV here (default name from the generator):

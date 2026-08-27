@@ -35,7 +35,9 @@
 suppressPackageStartupMessages(library(ggplot2))
 
 # ---- 0. CONFIG --------------------------------------------------------------
-PROJECT_DIR <- "D:/Lican/uni/Investigacion/Colaboraciones_y_ayudas/Retamap"
+# Folder that CONTAINS gee_scripts/. Defaults to the directory the script is
+# invoked from (the project root); override with the RETAMAP_DIR env variable.
+PROJECT_DIR <- Sys.getenv("RETAMAP_DIR", unset = ".")
 GEE_DIR     <- file.path(PROJECT_DIR, "gee_scripts")
 WORK_DIR    <- file.path(GEE_DIR, "validation_data")
 OUT_DIR     <- file.path(WORK_DIR, "analysis")

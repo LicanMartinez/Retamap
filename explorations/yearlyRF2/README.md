@@ -132,10 +132,10 @@ following up on its own.
 
 - Only **two years** were tested. A year with a poor mosaic might favour a
   year-specific model; neither of these two did.
-- At the time of the test **48.5% of Lican's validation load was still unloaded**
-  (201/390), concentrated in stratum S1 — which is exactly where the difference
-  between arms lives. The deficit would have to move a long way to reverse an
-  8-point omission gap, but it is not a closed question.
+- At the time of the test **48.5% of one interpreter's assigned load was still
+  uncollected** (201/390), concentrated in stratum S1 — which is exactly where
+  the difference between arms lives. The deficit would have to move a long way
+  to reverse an 8-point omission gap, but it is not a closed question.
 - The validation sample was stratified by the **canonical** map, so it has little
   power to measure commission that a variant introduces outside S1. That is
   precisely why the single far-background false positive matters more than its
